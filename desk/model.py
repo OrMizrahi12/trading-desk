@@ -38,7 +38,8 @@ class ClaudeModel:
     def command(self) -> list[str]:
         cmd = [self.executable, "-p", PROMPT, "--output-format", "json", "--json-schema", json.dumps(SCHEMA),
                "--tools", "", "--no-session-persistence", "--system-prompt", INSTRUCTIONS.read_text(),
-               "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}']
+               "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}',
+               "--setting-sources", "user,local"]  # not "project": CLAUDE.md is already sent as the system prompt
         return cmd + (["--model", self.model] if self.model else [])
 
     def decide(self, snapshot: dict, timeout_s: float) -> dict:

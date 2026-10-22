@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import pytest
 
 from desk.decision import SCHEMA
-from desk.model import ClaudeModel, ModelFailure
+from desk.model import INSTRUCTIONS, ClaudeModel, ModelFailure
 
 
 def runner(stdout="", returncode=0, stderr="", raises=None):
@@ -35,6 +35,8 @@ def test_call_shape():
     assert json.loads(cmd[cmd.index("--json-schema") + 1]) == SCHEMA
     assert cmd[cmd.index("--tools") + 1] == ""  # no tools: it can only answer
     assert "--no-session-persistence" in cmd
+    assert cmd[cmd.index("--system-prompt") + 1] == INSTRUCTIONS.read_text()
+    assert "project" not in cmd[cmd.index("--setting-sources") + 1].split(",")  # CLAUDE.md must reach the model once
     assert json.loads(run.seen["input"]) == {"bar": 1}  # the snapshot goes in on stdin
     assert run.seen["timeout"] == 60
     assert run.seen["cwd"].name == "trading-desk"
