@@ -36,7 +36,7 @@ def test_call_shape():
     assert cmd[cmd.index("--tools") + 1] == ""  # no tools: it can only answer
     assert "--no-session-persistence" in cmd
     assert cmd[cmd.index("--system-prompt") + 1] == INSTRUCTIONS.read_text()
-    assert "project" not in cmd[cmd.index("--setting-sources") + 1].split(",")  # CLAUDE.md must reach the model once
+    assert cmd[cmd.index("--setting-sources") + 1] == ""  # no user/project/local files: CLAUDE.md reaches the model once, alone
     assert json.loads(run.seen["input"]) == {"bar": 1}  # the snapshot goes in on stdin
     assert run.seen["timeout"] == 60
     assert run.seen["cwd"].name == "trading-desk"
