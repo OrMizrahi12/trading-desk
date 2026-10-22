@@ -2,9 +2,10 @@
 
 import functools
 
+import pandas as pd
 import pytest
 
-from conftest import LIMITS
+from conftest import CLOSE, LIMITS, WAIT, buy, rig, sell  # noqa: F401
 from mcp_fakes import anyio_backend, data, mcp_rig  # noqa: F401
 from desk import limits_pin
 from desk.limits_pin import LimitsTampered, verify
@@ -73,3 +74,78 @@ async def test_the_server_refuses_entries_but_not_exits_when_the_file_no_longer_
         closed = await c.call_tool("close_position", {"reason": "get out"})
         assert not closed.is_error and data(closed)["status"] == "sold"  # exits never depend on the pin
     assert [r["outcome"] for r in rig.journal()] == ["done", "refused", "done"]
+
+
+# -- the heartbeat: same rule, entries refused and exits never blocked -------------------------------------
+
+
+class Pin:
+    """A stand-in for limits_pin.verify whose answer a test can flip."""
+
+    def __init__(self, ok=True):
+        self.ok, self.calls = ok, 0
+
+    def __call__(self):
+        self.calls += 1
+        if not self.ok:
+            raise LimitsTampered("the limits file no longer matches its pin (test)")
+
+
+def belts(r):
+    return {b["name"]: b["detail"] for rec in r.records() for b in rec.get("seatbelts", [])}
+
+
+def next_bar(r):
+    r.feed.shown += 1
+    r.now = r.now + pd.Timedelta(minutes=5)
+
+
+def test_heartbeat_refuses_a_buy_when_the_limits_file_no_longer_matches(rig):
+    r = rig(answers=[buy()], limits_check=Pin(ok=False))
+    r.hb.tick()
+    rec = r.records()[0]
+    assert len(r.model.calls) == 1  # the model still saw the bar: Python only refuses
+    assert rec["verdict"]["allowed"] is False and rec["verdict"]["seatbelt"] == "limits_pin"
+    assert "no longer matches" in rec["verdict"]["reason"] and "result" not in rec
+    assert "limits_pin" in belts(r) and r.ib.placed == [] and r.ib.holdings.get("SPY", 0) == 0
+
+
+def test_heartbeat_buys_when_the_limits_file_matches(rig):
+    pin = Pin(ok=True)
+    r = rig(answers=[buy()], limits_check=pin)
+    r.hb.tick()
+    assert pin.calls == 1 and r.ib.holdings["SPY"] > 0 and "limits_pin" not in belts(r)
+
+
+def test_heartbeat_exits_and_waits_never_depend_on_the_pin(rig):
+    for answer in (CLOSE, sell(0.01), WAIT):  # 0.01R is a few shares: a real partial sale
+        pin = Pin(ok=True)
+        r = rig(answers=[buy(size_r=1.0), answer], limits_check=pin)
+        r.hb.tick()
+        held = r.ib.holdings["SPY"]
+        assert held > 0
+        pin.ok, pin.calls = False, 0  # the limits file is swapped after the entry
+        next_bar(r)
+        r.hb.tick()
+        assert pin.calls == 0 and "limits_pin" not in belts(r), answer["action"]  # not even consulted
+        if answer["action"] == "close":
+            assert r.ib.holdings["SPY"] == 0
+        elif answer["action"] == "sell":
+            assert 0 < r.ib.holdings["SPY"] < held
+
+
+def test_the_flatten_seatbelt_still_sells_when_the_limits_file_no_longer_matches(rig):
+    pin = Pin(ok=True)
+    r = rig(answers=[buy(size_r=1.0), WAIT], limits_check=pin)
+    r.hb.tick()
+    pin.ok = False
+    r.now = pd.Timestamp("2026-10-21 15:50", tz="America/New_York").tz_convert("UTC")
+    r.hb.tick()
+    assert r.ib.holdings["SPY"] == 0
+
+
+def test_the_real_run_passes_the_check_to_the_heartbeat():
+    """desk/__main__.py builds the real Heartbeat; without this argument the pin would silently not apply there."""
+    import inspect
+    from desk import __main__ as entry
+    assert "limits_check=limits_pin.verify" in inspect.getsource(entry.main)

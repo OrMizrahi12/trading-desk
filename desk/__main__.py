@@ -12,6 +12,7 @@ from live.feed import BarFeed
 from live.journal import Journal as LabJournal
 from live.risk import Risk
 
+from . import limits_pin
 from .heartbeat import Heartbeat
 from .journal import Journal, State
 from .model import ClaudeModel
@@ -38,7 +39,7 @@ def main() -> None:
         Heartbeat(ib=ib, contract=contract, feed=BarFeed(ib, contract), model=ClaudeModel(model=args.model),
                   executor=Executor(ib, broker, contract), broker=broker, risk=risk, journal=Journal(),
                   state=State.load(), symbol=SYMBOL, fetch_daily=lambda: fetch_ib_daily(ib, contract),
-                  lab_journal=LabJournal(JOURNAL_PATH)).run(once=args.once)
+                  lab_journal=LabJournal(JOURNAL_PATH), limits_check=limits_pin.verify).run(once=args.once)
     finally:
         ib.disconnect()
 

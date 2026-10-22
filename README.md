@@ -106,8 +106,9 @@ Four layers, each repeating the others so no single one has to be trusted:
 4. **On connect**: `connect_paper` refuses a non-local host, a non-paper port and any account not starting with `DU`.
 
 5. **A pinned fingerprint of the limits file** (`desk/limits_pin.py`, `desk/limits.sha256`): before every `place_bracket` the
-   MCP server compares the file's SHA-256 (a fingerprint of its exact bytes) with the committed pin and refuses new entries on
-   a mismatch. Exits and reads are unaffected. After a deliberate change a person runs `.venv/bin/python -m desk.limits_pin --update`
+   MCP server, and before every `buy` the heartbeat (seatbelt `limits_pin`), compares the file's SHA-256 (a fingerprint of its
+   exact bytes) with the committed pin and refuses the new entry on a mismatch. The model still sees the bar. `sell`, `close`,
+   `wait`, the flatten-before-close seatbelt and all reads are unaffected. After a deliberate change a person runs `.venv/bin/python -m desk.limits_pin --update`
    and commits the new pin; the git diff is the record. Checking it by hand: `.venv/bin/python -m desk.limits_pin`.
 
 Tests: `tests/test_guardrails.py` (layers 1-2), `tests/test_mcp_trade.py` (3), `tests/test_mcp_read.py` (4),
@@ -126,7 +127,7 @@ the limits" is **not achievable inside this repo**. What the layers really give:
 - **Detect and fail closed**: a replaced file, at the MCP server (layer 5), at the moment an order would be sent.
 - **Not covered**: a process running as the desk's user that replaces the limits file *and* the pin, or edits the hook, the
   settings, `desk/limits_pin.py` or the lab's `live/risk.py`, or points `TRADING_LAB` at another copy of the lab. The repo's
-  git history makes these visible afterwards, nothing more. The heartbeat (`desk/heartbeat.py`) does not check the pin yet.
+  git history makes these visible afterwards, nothing more.
 - **To close it for real** (outside this repo, a person's call): own the lab's `live/` folder by root (or move the limits file
   into a root-owned folder), or run the desk as a different OS user than the one that runs Claude Code, or use a filesystem
   that supports `chattr +i`.

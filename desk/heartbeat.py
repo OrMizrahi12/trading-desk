@@ -19,6 +19,7 @@ from live.refs import owns
 from live.risk import RiskRefused, net_liquidation
 
 from . import execute, gates, seatbelts, snapshot
+from .limits_pin import LimitsTampered
 from .budget import Deadline
 from .decision import Decision, InvalidDecision, parse
 from .journal import Journal, State
@@ -44,13 +45,14 @@ class Heartbeat:
     def __init__(self, *, ib, contract, feed, model: Model, executor, broker, risk, journal: Journal, state: State,
                  symbol: str = "SPY", clock=utc_now, mono=time.monotonic, budget_s: float = BUDGET_S,
                  model_timeout_s: float = MODEL_TIMEOUT_S, min_exec_s: float = MIN_EXEC_S, fetch_daily=None,
-                 lab_journal=None):
+                 lab_journal=None, limits_check=None):
         self.ib, self.contract, self.feed, self.model = ib, contract, feed, model
         self.executor, self.broker, self.risk = executor, broker, risk
         self.journal, self.state, self.symbol, self.tag = journal, state, symbol, broker.tag
         self.clock, self.mono, self.budget_s = clock, mono, budget_s
         self.model_timeout_s, self.min_exec_s = model_timeout_s, min_exec_s
         self.fetch_daily, self.lab_journal = fetch_daily, lab_journal
+        self.limits_check = limits_check  # raises LimitsTampered if the limits file no longer matches its pin; None = not checked
         self._daily: tuple[str, pd.DataFrame | None] | None = None
         self._last_close: float | None = None  # newest known price, for the flatten seatbelt
         self._missed_day: str | None = None
@@ -165,6 +167,11 @@ class Heartbeat:
         if theirs:  # the MCP server holds or is entering the symbol: not ours to trade alongside it
             return gates.Verdict(False, f"the MCP server has {len(theirs)} order(s) on {self.symbol}: the heartbeat does "
                                         f"not trade alongside it", seatbelt="mcp_active")
+        if decision.action == "buy" and self.limits_check is not None:  # entries only: sells and closes reduce risk
+            try:
+                self.limits_check()
+            except LimitsTampered as exc:
+                return gates.Verdict(False, str(exc), seatbelt="limits_pin")
         if decision.action in ("buy", "sell") and deadline.remaining() < self.min_exec_s:
             return gates.Verdict(False, f"budget exhausted: {deadline.remaining():.0f}s left")
         try:

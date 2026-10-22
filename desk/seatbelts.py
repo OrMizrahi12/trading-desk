@@ -9,6 +9,7 @@ time one acts it is logged and written to the journal (`seatbelt` / `seatbelts` 
 - flatten_before_close  at (session close - FLATTEN_BEFORE_CLOSE_MIN minutes) by the wall clock, any long
                  position is sold. Wall clock, not bars: bars arrive 15-20 minutes late.
 - overnight_carry  a position the desk bought on an earlier day is sold when the market opens. Never overnight.
+- limits_pin    the lab's risk limits file no longer matches its committed fingerprint (desk/limits_pin.py): no new buys.
 - mcp_active    the MCP server (desk/mcp_server) has orders on the symbol: the heartbeat trades nothing and sells
                  nothing alongside it (the server flattens its own position, 5 minutes before the heartbeat would).
 - paper_guard    a non-paper port, host or account stops everything.
