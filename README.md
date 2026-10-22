@@ -22,7 +22,7 @@ for every closed 5-minute SPY bar:
 1. polls the lab's bar feed (`~/trading-lab/live/feed.py`) and builds a snapshot: 5-minute, 15-minute and daily bars
    with indicators, positions, open orders, account, session clock, the STOP-file flag and the last journal entries
    (written to `data/desk/snapshots/`);
-2. runs `claude -p` in this folder with a JSON schema: `action` (buy / sell / close / wait), `size_r`, `stop`,
+2. runs `claude -p` in this folder (tools: only `Skill`, to load the desk's skills) with a JSON schema: `action` (buy / sell / close / wait), `size_r`, `stop`,
    `target`, `reason`. **R** = 1% of the account's value, the money lost if the stop is hit;
 3. validates the answer (anything invalid or missing becomes `wait`), then the gates: STOP file (blocks buys; exits
    still pass), bar age, session time, no adding to a position, lab risk limits;
@@ -87,4 +87,7 @@ Tests: `tests/test_mcp_*.py` run the server in memory against a fake IB (`tests/
 ## Status
 
 Heartbeat built and dry-run on the paper Gateway. MCP server built and tested against a fake IB; one real read-only quote
-checked against the paper Gateway. The constitution (the only instructions the trader reads) is `CLAUDE.md`.
+checked against the paper Gateway. The constitution (the trader's system prompt) is `CLAUDE.md`; the detailed know-how is four skills in
+`.claude/skills` (`market-read`, `entry-checklist`, `trade-management`, `post-trade-review`). The trader gets them through
+`--plugin-dir` (`.claude-plugin/plugin.json` makes this folder a plugin that points at `.claude/skills`) and its only tool is
+`Skill`; it loads them as `desk:<name>`. The instructions hash in the journal and ledger covers all of these files.

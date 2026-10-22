@@ -1,0 +1,6 @@
+{
+  "name": "desk",
+  "version": "2.0.0",
+  "description": "The trading desk's skills for the paper trader (read by `claude -p --plugin-dir`).",
+  "skills": "./.claude/skills"
+}

@@ -9,7 +9,9 @@ from typing import Protocol
 from .decision import SCHEMA
 
 DESK_DIR = Path(__file__).parent.parent
-INSTRUCTIONS = DESK_DIR / "CLAUDE.md"  # the desk constitution: the only instructions the trader gets
+INSTRUCTIONS = DESK_DIR / "CLAUDE.md"  # the desk constitution: the system prompt, sent whole on every bar
+PLUGIN_MANIFEST = DESK_DIR / ".claude-plugin" / "plugin.json"  # makes the desk folder a plugin so `--plugin-dir` finds the skills
+SKILLS_DIR = DESK_DIR / ".claude" / "skills"  # the trader's know-how, loaded on demand with the Skill tool
 PROMPT = "Decide for the closed bar in the JSON snapshot on stdin. Answer only in the required schema."
 
 
@@ -25,21 +27,32 @@ class Model(Protocol):
     def decide(self, snapshot: dict, timeout_s: float) -> dict: ...
 
 
+def instruction_files() -> list[Path]:
+    """Everything that shapes the trader's behaviour: the constitution, the plugin manifest and every skill file."""
+    return [INSTRUCTIONS, PLUGIN_MANIFEST, *sorted(p for p in SKILLS_DIR.rglob("*") if p.is_file())]
+
+
 def instructions_hash() -> str:
-    return hashlib.sha1(INSTRUCTIONS.read_bytes()).hexdigest()[:12]
+    """Fingerprint of `instruction_files()` (the journal records it, so a run names its exact instructions)."""
+    digest = hashlib.sha1()
+    for path in instruction_files():
+        digest.update(path.relative_to(DESK_DIR).as_posix().encode() + b"\0" + path.read_bytes() + b"\0")
+    return digest.hexdigest()[:12]
 
 
 class ClaudeModel:
-    """Runs `claude -p` in the desk folder with the decision JSON schema. No tools: it can only answer."""
+    """Runs `claude -p` in the desk folder with the decision JSON schema. Its only tool is Skill: it can load the
+    desk's skills and answer, nothing else."""
 
     def __init__(self, *, cwd: Path = DESK_DIR, run=subprocess.run, executable: str = "claude", model: str | None = None):
         self.cwd, self.run, self.executable, self.model = cwd, run, executable, model
 
     def command(self) -> list[str]:
         cmd = [self.executable, "-p", PROMPT, "--output-format", "json", "--json-schema", json.dumps(SCHEMA),
-               "--tools", "", "--no-session-persistence", "--system-prompt", INSTRUCTIONS.read_text(),
+               "--tools", "Skill", "--no-session-persistence", "--system-prompt", INSTRUCTIONS.read_text(),
                "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}',
-               "--setting-sources", ""]  # no settings or CLAUDE.md files at all: the system prompt is the whole instructions
+               "--setting-sources", "",  # no settings or CLAUDE.md files: the system prompt carries the constitution once
+               "--plugin-dir", str(self.cwd)]  # the skills (.claude/skills) arrive as a plugin
         return cmd + (["--model", self.model] if self.model else [])
 
     def decide(self, snapshot: dict, timeout_s: float) -> dict:
