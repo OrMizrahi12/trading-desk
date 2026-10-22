@@ -42,4 +42,4 @@ fake IB, no network).
 
 ## Status
 
-Heartbeat built and dry-run on the paper Gateway. Strategy instructions: `desk/instructions.md`.
+Heartbeat built and dry-run on the paper Gateway. The constitution (the only instructions the trader reads) is `CLAUDE.md`.

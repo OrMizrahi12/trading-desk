@@ -1,1 +1,2 @@
 version,model,start_date,end_date,instructions_file_hash,symbols,bar_size,risk_limits,notes
+Trader v1,claude-cli-default,2026-10-22,,73a60f566379,SPY,5min,"R=1% of net liq; 0.5R typical, 1R max; ~3 entries/day; flat 10min before close; paper only","CLAUDE.md is the only instructions (hash = sha1[:12], same as journal 'instructions'); style: patient, mostly wait; 2R min reward-to-risk"

@@ -9,7 +9,7 @@ from typing import Protocol
 from .decision import SCHEMA
 
 DESK_DIR = Path(__file__).parent.parent
-INSTRUCTIONS = Path(__file__).with_name("instructions.md")
+INSTRUCTIONS = DESK_DIR / "CLAUDE.md"  # the desk constitution: the only instructions the trader gets
 PROMPT = "Decide for the closed bar in the JSON snapshot on stdin. Answer only in the required schema."
 
 
