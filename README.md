@@ -91,3 +91,19 @@ checked against the paper Gateway. The constitution (the trader's system prompt)
 `.claude/skills` (`market-read`, `entry-checklist`, `trade-management`, `post-trade-review`). The trader gets them through
 `--plugin-dir` (`.claude-plugin/plugin.json` makes this folder a plugin that points at `.claude/skills`) and its only tool is
 `Skill`; it loads them as `desk:<name>`. The instructions hash in the journal and ledger covers all of these files.
+
+## Guardrails for an interactive session
+
+Four layers, each repeating the others so no single one has to be trusted:
+
+1. **PreToolUse hook** (`desk/hook.py`, loaded by `.claude/settings.json`): runs before every MCP trade call and checks it
+   against the lab's limits file (valid file, SPY listed, `size_r` in (0, 1], stop above 0, target above the stop or a
+   reason, no STOP file). Exits (`close_position`, `cancel_order`) are never blocked. Fails closed: a crash blocks the call.
+2. **Nobody but the person edits the guardrails**: `permissions.deny` rules on the limits file, the hook, the settings and
+   `.mcp.json`, plus the same hook refusing Bash commands that name them (read-only `cat`/`grep`/`ls` are fine). The Bash check
+   is a tripwire, not a sandbox: for a hard guarantee make the files read-only for this user or owned by another one.
+3. **Inside the MCP server**: `gates.gate` and the lab's `Risk` (max shares, position value, trades per day, daily loss) in the Broker.
+4. **On connect**: `connect_paper` refuses a non-local host, a non-paper port and any account not starting with `DU`.
+
+Tests: `tests/test_guardrails.py` (layers 1-2), `tests/test_mcp_trade.py` (3), `tests/test_mcp_read.py` (4).
+The trader's own `claude -p` runs with no settings files and only the Skill tool, so none of this applies to it.

@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "deny": [
+      "Edit(~/trading-lab/live/risk_limits.yaml)",
+      "Edit(**/risk_limits.yaml)",
+      "Edit(/.claude/settings*.json)",
+      "Edit(/desk/hook.py)",
+      "Edit(/.mcp.json)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "mcp__trading-desk__.*|Edit|Write|MultiEdit|NotebookEdit|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$CLAUDE_PROJECT_DIR\" && .venv/bin/python -m desk.hook"
+          }
+        ]
+      }
+    ]
+  }
+}
