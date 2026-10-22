@@ -23,6 +23,17 @@ from .decision import Decision
 log = logging.getLogger("desk")
 
 
+MCP_TAG_PREFIX = "live:mcp:"  # orderRef prefix of the MCP server's orders (desk/mcp_server), e.g. live:mcp:SPY
+
+
+def mcp_orders(ib, symbol: str) -> list:
+    """Open orders on `symbol` that the MCP server placed. While any rests, the MCP server holds or is about to hold
+    the symbol, and the heartbeat must not trade it: IB lets only the placing client change an order, so selling the
+    MCP server's shares from here would leave its stop live."""
+    tag = MCP_TAG_PREFIX + symbol
+    return [t for t in open_orders(ib, symbol) if not t.isDone() and owns(tag, t.order.orderRef or "")]
+
+
 def our_protection(ib, tag: str, symbol: str) -> list:
     return [t for t in open_orders(ib, symbol) if t.order.action == "SELL" and owns(tag, t.order.orderRef or "")
             and not t.isDone()]

@@ -195,3 +195,61 @@ def test_ordinary_decisions_carry_no_seatbelt_tag(rig):
     r = rig(answers=[WAIT])
     r.hb.tick()
     assert "seatbelts" not in r.records()[0]
+
+
+# -- the MCP server and the heartbeat never trade SPY side by side -------------------------------------
+
+def mcp_bracket(r, shares=5):
+    """The MCP server (another IB client, tag live:mcp:SPY) has bought SPY with a stop and a target."""
+    from live.broker import Broker
+    from live.execution import Executor
+    executor = Executor(r.ib, Broker(r.ib, "live:mcp:SPY", risk=r.risk), r.contract, timeout_s=2)
+    ref = r.ib.market_price
+    assert executor.enter("live:mcp:SPY:2026-10-21:1245", shares, ref, round(ref - 3, 2), round(ref + 6, 2))
+    assert r.ib.holdings["SPY"] == shares
+
+
+def test_heartbeat_refuses_every_decision_while_the_mcp_server_holds_spy(rig):
+    for answer in (buy(), CLOSE, {"action": "sell", "size_r": 0.3, "stop": None, "target": None, "reason": "trim"}):
+        r = rig(answers=[answer])
+        mcp_bracket(r)
+        sent = len(orders(r))
+        r.hb.tick()
+        rec = r.records()[0]
+        assert rec["verdict"]["allowed"] is False and rec["verdict"]["seatbelt"] == "mcp_active", answer["action"]
+        assert "MCP server" in rec["verdict"]["reason"] and "result" not in rec
+        assert "mcp_active" in belts(r)
+        assert len(orders(r)) == sent and r.ib.holdings["SPY"] == 5  # nothing sent, nothing sold
+        assert all(not t.isDone() for t in r.ib.trades() if t.order.action == "SELL")  # its stop and target still rest
+
+
+def test_heartbeat_refuses_to_buy_while_an_mcp_entry_is_only_resting(rig):
+    r = rig(answers=[buy()])
+    r.ib.freeze = True  # the MCP entry has not filled
+    from ib_async import LimitOrder
+    from live.broker import Broker
+    Broker(r.ib, "live:mcp:SPY").place(r.contract, LimitOrder("BUY", 5, 600.0), "live:mcp:SPY:2026-10-21:1245")
+    r.hb.tick()
+    assert r.records()[0]["verdict"]["seatbelt"] == "mcp_active" and len(orders(r)) == 1
+
+
+def test_heartbeat_still_waits_and_trades_normally_without_the_mcp_server(rig):
+    r = rig(answers=[WAIT])
+    r.hb.tick()
+    assert r.records()[0]["verdict"]["allowed"] and "seatbelts" not in r.records()[0]
+    r = rig(answers=[buy()])
+    r.hb.tick()
+    assert r.records()[0]["result"]["status"] == "bought"  # the lab's own order refs (live:desk:...) are not the MCP server's
+
+
+def test_the_wall_clock_flatten_leaves_the_mcp_servers_shares_to_the_mcp_server(rig):
+    r = rig()
+    mcp_bracket(r)
+    r.now = ny("2026-10-21 15:50")
+    n = len(orders(r))
+    r.hb.tick()
+    r.hb.tick()
+    recs = seatbelt_records(r, "mcp_active")
+    assert len(recs) == 1 and recs[0]["result"] == {"status": "left_to_mcp", "would_have_been": "flatten_before_close"}
+    assert len(orders(r)) == n and r.ib.holdings["SPY"] == 5 and not r.state.halted
+    assert all(not t.isDone() for t in r.ib.trades() if t.order.action == "SELL")

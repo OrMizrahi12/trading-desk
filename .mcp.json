@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "trading-desk": {
+      "type": "stdio",
+      "command": ".venv/bin/python",
+      "args": [
+        "-m",
+        "desk.mcp_server"
+      ],
+      "env": {}
+    }
+  }
+}

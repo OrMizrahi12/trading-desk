@@ -161,6 +161,10 @@ class Heartbeat:
     def _gate(self, decision: Decision, snap: dict, ref_price: float, deadline: Deadline) -> gates.Verdict:
         if decision.action == "wait":
             return gates.Verdict(True, "wait")
+        theirs = execute.mcp_orders(self.ib, self.symbol)
+        if theirs:  # the MCP server holds or is entering the symbol: not ours to trade alongside it
+            return gates.Verdict(False, f"the MCP server has {len(theirs)} order(s) on {self.symbol}: the heartbeat does "
+                                        f"not trade alongside it", seatbelt="mcp_active")
         if decision.action in ("buy", "sell") and deadline.remaining() < self.min_exec_s:
             return gates.Verdict(False, f"budget exhausted: {deadline.remaining():.0f}s left")
         try:
@@ -205,6 +209,12 @@ class Heartbeat:
                 self._missed_day = str(now.date())  # once a day: say that a position is held while nothing can be sold
                 self._seatbelt_record({"seatbelt": "flatten_before_close", "held": pos.shares,
                                        "result": {"status": "market_closed", "note": "position held while the market is shut"}}, now)
+            return
+        if execute.mcp_orders(self.ib, self.symbol):  # the shares are the MCP server's: it flattens its own, earlier
+            if self._missed_day != f"mcp:{now.date()}":
+                self._missed_day = f"mcp:{now.date()}"
+                self._seatbelt_record({"seatbelt": "mcp_active", "held": pos.shares,
+                                       "result": {"status": "left_to_mcp", "would_have_been": why}}, now)
             return
         record = {"seatbelt": why, "held": pos.shares, "ref_price": self._last_close}
         try:
