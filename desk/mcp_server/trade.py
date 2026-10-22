@@ -25,7 +25,7 @@ from live.execution import DuplicateEntry, ExecutionHalt, OrderRejected
 from live.reconcile import ReconcileResult, cancel_confirmed, open_orders
 from live.risk import RiskRefused, net_liquidation
 
-from .. import execute, gates, seatbelts, snapshot
+from .. import execute, gates, limits_pin, seatbelts, snapshot
 from ..decision import Decision, InvalidDecision, parse
 from .core import DELAY_NOTE, MCP_TAG, SYMBOL, Desk, Refused, owner_of
 
@@ -107,6 +107,11 @@ def _net_liq(ib) -> float | None:
 def place_bracket(ib, desk: Desk, *, size_r: float, stop: float, target: float | None, reason: str,
                   no_target_reason: str | None = None) -> dict:
     _entries_allowed(desk)
+    if desk.pinned:  # re-checked on every entry: the file may have been swapped since the server started
+        try:
+            limits_pin.verify()
+        except limits_pin.LimitsTampered as exc:
+            raise Refused(f"{exc}. New entries are blocked; close_position still works.") from exc
     if size_r > MAX_SIZE_R:
         raise Refused(f"size_r {size_r} is above {MAX_SIZE_R}R: the desk never risks more than 1R on one trade")
     if target is None and not (no_target_reason or "").strip():

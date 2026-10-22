@@ -54,6 +54,9 @@ class Desk:
         self.worker, self.root, self.clock = worker, Path(root), clock
         self.heartbeat_dir = Path(heartbeat_dir)  # the heartbeat's journal folder (read by search_journal only)
         self.executor_kwargs = executor_kwargs or {}  # e.g. {"timeout_s": 2} in tests
+        # The real limits file is checked against its pinned fingerprint before each entry (trade.place_bracket); a Risk
+        # handed in (tests) is the caller's own. Not checked here: a mismatch must block entries, not reads or exits.
+        self.pinned = risk is None
         self.risk = risk or Risk.from_file()
         self.journal = Journal(self.root)
         self.state = State.load(self.root)

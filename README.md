@@ -101,9 +101,32 @@ Four layers, each repeating the others so no single one has to be trusted:
    reason, no STOP file). Exits (`close_position`, `cancel_order`) are never blocked. Fails closed: a crash blocks the call.
 2. **Nobody but the person edits the guardrails**: `permissions.deny` rules on the limits file, the hook, the settings and
    `.mcp.json`, plus the same hook refusing Bash commands that name them (read-only `cat`/`grep`/`ls` are fine). The Bash check
-   is a tripwire, not a sandbox: for a hard guarantee make the files read-only for this user or owned by another one.
+   is a tripwire, not a sandbox.
 3. **Inside the MCP server**: `gates.gate` and the lab's `Risk` (max shares, position value, trades per day, daily loss) in the Broker.
 4. **On connect**: `connect_paper` refuses a non-local host, a non-paper port and any account not starting with `DU`.
 
-Tests: `tests/test_guardrails.py` (layers 1-2), `tests/test_mcp_trade.py` (3), `tests/test_mcp_read.py` (4).
-The trader's own `claude -p` runs with no settings files and only the Skill tool, so none of this applies to it.
+5. **A pinned fingerprint of the limits file** (`desk/limits_pin.py`, `desk/limits.sha256`): before every `place_bracket` the
+   MCP server compares the file's SHA-256 (a fingerprint of its exact bytes) with the committed pin and refuses new entries on
+   a mismatch. Exits and reads are unaffected. After a deliberate change a person runs `.venv/bin/python -m desk.limits_pin --update`
+   and commits the new pin; the git diff is the record. Checking it by hand: `.venv/bin/python -m desk.limits_pin`.
+
+Tests: `tests/test_guardrails.py` (layers 1-2), `tests/test_mcp_trade.py` (3), `tests/test_mcp_read.py` (4),
+`tests/test_limits_pin.py` (5). The trader's own `claude -p` runs with no settings files and only the Skill tool, so none of
+this applies to it.
+
+### Finding: the limits file cannot be made tamper-proof on this machine
+
+Tried 2026-10-22: the limits file was made `root:root`, mode 444. That stops editing it in place (`>>`, `sed -i`, an editor
+saving), but its folder (`~/trading-lab/live/`) belongs to the desk's user, so any process running as that user can still
+`mv` or `rm` the file and put another in its place; this was confirmed by hand. `chattr +i` (the immutable flag, which would
+stop that) is refused on this machine with "Operation not permitted". So "no process running as the desk's user can change
+the limits" is **not achievable inside this repo**. What the layers really give:
+
+- **Prevent**: in-place edits (root ownership), and edits through Claude Code's tools (deny rules and the hook).
+- **Detect and fail closed**: a replaced file, at the MCP server (layer 5), at the moment an order would be sent.
+- **Not covered**: a process running as the desk's user that replaces the limits file *and* the pin, or edits the hook, the
+  settings, `desk/limits_pin.py` or the lab's `live/risk.py`, or points `TRADING_LAB` at another copy of the lab. The repo's
+  git history makes these visible afterwards, nothing more. The heartbeat (`desk/heartbeat.py`) does not check the pin yet.
+- **To close it for real** (outside this repo, a person's call): own the lab's `live/` folder by root (or move the limits file
+  into a root-owned folder), or run the desk as a different OS user than the one that runs Claude Code, or use a filesystem
+  that supports `chattr +i`.
