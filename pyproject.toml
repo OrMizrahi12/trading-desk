@@ -1,0 +1,24 @@
+[project]
+name = "trading-desk"
+version = "0.1.0"
+description = "Paper-trading-only AI desk: a heartbeat that asks Claude for a decision on every closed 5-minute bar."
+requires-python = ">=3.12"
+# The lab (~/trading-lab) is plain modules with no build system, so uv cannot install it as a package.
+# desk/lab.py puts its folder on sys.path instead; these are the third-party packages the lab modules need.
+dependencies = [
+    "exchange-calendars>=4.13.2",
+    "ib-async>=2.1.0",
+    "pandas>=3.0.6",
+    "pyarrow>=26.0.0",
+    "pyyaml>=6.0.3",
+]
+
+[dependency-groups]
+dev = ["pytest>=9.1.1"]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
