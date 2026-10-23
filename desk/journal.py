@@ -68,6 +68,20 @@ class Journal:
                 out.append(r)
         return out
 
+    def closed_trades(self) -> list[dict]:
+        """The `trade_closed` records (see trades.py), oldest first, each with an `at` key: when the desk noticed the end."""
+        if not self.path.exists():
+            return []
+        out = []
+        for line in self.path.read_text().splitlines():
+            try:
+                r = json.loads(line)
+            except ValueError:
+                continue
+            if isinstance(r, dict) and isinstance(r.get("trade_closed"), dict):
+                out.append({**r["trade_closed"], "noticed_at": r.get("at")})
+        return out
+
     def day_summary(self, day: str | None = None, before: str | None = None) -> str | None:
         """Plain facts about one New York trading day, from the bar records: `day`, or the latest day before `before`.
 
@@ -128,6 +142,7 @@ class State:
     session_last_bar: str | None = None  # start of the last bar the session answered: later bars send what changed since
     session_cost_usd: float | None = None  # claude's running cost total for the session, to get each bar's own cost
     session_context_share: float | None = None  # how full its context window was after that bar
+    open_trade: dict | None = None  # the desk's long while it is open (entry, stop, target, sales so far), to journal its end
 
     @classmethod
     def load(cls, root: Path = DESK_DIR) -> "State":
@@ -145,6 +160,7 @@ class State:
             state.session_last_bar = data.get("session_last_bar")
             state.session_cost_usd = data.get("session_cost_usd")
             state.session_context_share = data.get("session_context_share")
+            state.open_trade = data.get("open_trade")
         return state
 
     def save(self) -> None:
@@ -154,4 +170,5 @@ class State:
                                              "session_instructions": self.session_instructions,
                                              "session_bars": self.session_bars, "session_last_bar": self.session_last_bar,
                                              "session_cost_usd": self.session_cost_usd,
-                                             "session_context_share": self.session_context_share}, indent=1, sort_keys=True))
+                                             "session_context_share": self.session_context_share,
+                                             "open_trade": self.open_trade}, indent=1, sort_keys=True))

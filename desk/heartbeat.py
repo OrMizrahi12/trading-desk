@@ -19,7 +19,7 @@ from live.execution import DuplicateEntry, ExecutionHalt, OrderRejected
 from live.refs import owns
 from live.risk import RiskRefused, net_liquidation
 
-from . import execute, gates, seatbelts, snapshot
+from . import execute, gates, seatbelts, snapshot, trades
 from .limits_pin import LimitsTampered
 from .budget import Deadline
 from .decision import Decision, InvalidDecision, parse
@@ -48,7 +48,7 @@ class Heartbeat:
     def __init__(self, *, ib, contract, feed, model: Model, executor, broker, risk, journal: Journal, state: State,
                  symbol: str = "SPY", clock=utc_now, mono=time.monotonic, budget_s: float = BUDGET_S,
                  model_timeout_s: float = MODEL_TIMEOUT_S, min_exec_s: float = MIN_EXEC_S, fetch_daily=None,
-                 lab_journal=None, limits_check=None):
+                 lab_journal=None, limits_check=None, scribe=None):
         self.ib, self.contract, self.feed, self.model = ib, contract, feed, model
         self.executor, self.broker, self.risk = executor, broker, risk
         self.journal, self.state, self.symbol, self.tag = journal, state, symbol, broker.tag
@@ -56,6 +56,7 @@ class Heartbeat:
         self.model_timeout_s, self.min_exec_s = model_timeout_s, min_exec_s
         self.fetch_daily, self.lab_journal = fetch_daily, lab_journal
         self.limits_check = limits_check  # raises LimitsTampered if the limits file no longer matches its pin; None = not checked
+        self.scribe = scribe  # writes the vault notes (trade, day, week) in the background; None = no notes
         self._daily: tuple[str, pd.DataFrame | None] | None = None
         self._last_close: float | None = None  # newest known price, for the flatten seatbelt
         self._missed_day: str | None = None
@@ -73,15 +74,20 @@ class Heartbeat:
         if closed is not None and not closed.empty:
             self._last_close = float(closed["close"].iloc[-1])
         self._seatbelt_flatten(self.clock())
+        self._close_out(self.clock())  # a stop or target may have filled since the last poll
         if poll_error is not None:
+            self._kick_scribe()
             raise poll_error
         if closed.empty:
+            self._kick_scribe()
             return []
         if self.state.last_bar_ts is None:  # first run: start from the newest bar, do not replay the history
             new = closed.iloc[-1:]
         else:
             new = closed[closed.index > pd.Timestamp(self.state.last_bar_ts)]
-        return [self.process_bar(closed, ts) for ts in new.index]
+        out = [self.process_bar(closed, ts) for ts in new.index]
+        self._kick_scribe()
+        return out
 
     def run(self, once: bool = False) -> None:
         while True:
@@ -133,8 +139,13 @@ class Heartbeat:
                 belts.append({"name": verdict.seatbelt, "detail": verdict.note or verdict.reason})
             if verdict.allowed and decision.action != "wait":
                 record["result"] = self._execute(decision, verdict, bar_start, ref_price)
-                if record["result"].get("status") == "bought":
+                res = record["result"]
+                if res.get("status") == "bought":
                     self.state.entry_day = str(now.tz_convert(snapshot.NY).date())
+                    self.state.open_trade = trades.open_trade(record, res, dataclasses.asdict(decision))
+                elif res.get("status") == "sold" and self.state.open_trade:
+                    trades.add_exit(self.state.open_trade, shares=res.get("shares"), price=res.get("price"),
+                                    kind=decision.action, at=now.isoformat())
                 if record["result"].get("status") == "refused_by_risk_limits":
                     belts.append({"name": "risk_limits", "detail": record["result"]["reason"]})
         except PaperGuardError as exc:
@@ -152,6 +163,8 @@ class Heartbeat:
         record["elapsed_s"] = round(deadline.elapsed(), 2)
         record["over_budget"] = deadline.expired
         self.journal.append(record)
+        if (record.get("result") or {}).get("status") != "bought":  # a buy is never closed on the bar that made it
+            self._close_out(now)
         self.state.last_bar_ts = bar_start.isoformat()
         self.state.save()
         self._sync_lab_journal()
@@ -316,6 +329,9 @@ class Heartbeat:
                 raise ExecutionHalt(f"{why}: {pos.shares} {self.symbol} must be sold but no price is known yet")
             record["result"] = execute.reduce_position(self.executor, self.ib, self.tag, self.symbol, pos.shares,
                                                        self._last_close)
+            if record["result"].get("status") == "sold" and self.state.open_trade:
+                trades.add_exit(self.state.open_trade, shares=record["result"].get("shares"),
+                                price=record["result"].get("price"), kind="seatbelt", at=now.isoformat())
             if record["result"].get("status") in ("sold", "nothing_to_sell"):
                 self.state.entry_day = None
         except PaperGuardError as exc:
@@ -330,6 +346,43 @@ class Heartbeat:
         self._sync_lab_journal()
         if self.state.halted:
             raise Halted(self.state.halted)
+
+    def _close_out(self, now: pd.Timestamp) -> None:
+        """When the desk is flat and a trade was open, journal its end (`trade_closed`): the vault writer works from it."""
+        trade = self.state.open_trade
+        if not trade:
+            return
+        try:
+            if execute.position_from_ib(self.ib, self.tag, self.symbol) is not None:
+                return  # still long (or only part was sold)
+            self.journal.append(trades.closed_record(trade, protection_fills=self._protection_fills(trade),
+                                                     now=now.isoformat()))
+            self.state.open_trade = None
+            self.state.save()
+        except Exception:  # never stops the desk; the next poll tries again
+            log.exception("could not journal the end of the trade")
+
+    def _protection_fills(self, trade: dict) -> list[dict]:
+        """Sales by the resting stop/target since the entry, as the broker reports them. Empty when it cannot say."""
+        try:
+            since = pd.Timestamp(trade["entry_seen_at"])
+            out = []
+            for f in self.ib.fills():
+                ex = f.execution
+                if (f.contract.symbol == self.symbol and ex.side == "SLD" and owns(self.tag, ex.orderRef or "")
+                        and pd.Timestamp(f.time) >= since):
+                    out.append({"shares": int(ex.shares), "price": float(ex.price), "time": pd.Timestamp(f.time).isoformat()})
+            return out
+        except Exception:
+            return []
+
+    def _kick_scribe(self) -> None:
+        if self.scribe is None:
+            return
+        try:
+            self.scribe.kick(self.clock())
+        except Exception:  # the notes are a convenience: they never stop a bar
+            log.exception("vault writer failed to start")
 
     def _seatbelt_record(self, record: dict, now: pd.Timestamp) -> None:
         record["at"] = now.isoformat()

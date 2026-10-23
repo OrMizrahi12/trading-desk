@@ -16,6 +16,7 @@ from . import limits_pin
 from .heartbeat import Heartbeat
 from .journal import Journal, State
 from .model import ClaudeModel
+from .scribe import Scribe
 from .snapshot import fetch_ib_daily
 
 CLIENT_ID = 8  # 1-7 are taken in the lab (see its AGENTS.md)
@@ -39,7 +40,8 @@ def main() -> None:
         Heartbeat(ib=ib, contract=contract, feed=BarFeed(ib, contract), model=ClaudeModel(model=args.model),
                   executor=Executor(ib, broker, contract), broker=broker, risk=risk, journal=Journal(),
                   state=State.load(), symbol=SYMBOL, fetch_daily=lambda: fetch_ib_daily(ib, contract),
-                  lab_journal=LabJournal(JOURNAL_PATH), limits_check=limits_pin.verify).run(once=args.once)
+                  lab_journal=LabJournal(JOURNAL_PATH), limits_check=limits_pin.verify,
+                  scribe=Scribe(Journal(), model=args.model)).run(once=args.once)
     finally:
         ib.disconnect()
 
