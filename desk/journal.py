@@ -106,8 +106,8 @@ class Journal:
         return "\n".join([head, *lines[:10],  # a busy day is cut short, the closing line always stays
                           f"- last decision ({last.get('action')}): {last.get('reason', '')[:200]}"])
 
-    def write_snapshot(self, bar_name: str, snapshot: dict) -> Path:
-        path = self.root / "snapshots" / f"{bar_name}.json"
+    def write_snapshot(self, bar_name: str, snapshot: dict, kind: str = "") -> Path:
+        path = self.root / "snapshots" / f"{bar_name}{kind}.json"
         _atomic_write(path, json.dumps(snapshot, indent=1, sort_keys=True, default=str))
         return path
 
@@ -125,6 +125,8 @@ class State:
     session_day: str | None = None
     session_instructions: str | None = None  # instructions hash when the session started; a change rolls it over
     session_bars: int = 0  # bars answered in it so far
+    session_last_bar: str | None = None  # start of the last bar the session answered: later bars send what changed since
+    session_context_share: float | None = None  # how full its context window was after that bar
 
     @classmethod
     def load(cls, root: Path = DESK_DIR) -> "State":
@@ -139,6 +141,8 @@ class State:
             for k in ("session_id", "session_day", "session_instructions"):
                 setattr(state, k, data.get(k))
             state.session_bars = data.get("session_bars", 0)
+            state.session_last_bar = data.get("session_last_bar")
+            state.session_context_share = data.get("session_context_share")
         return state
 
     def save(self) -> None:
@@ -146,4 +150,5 @@ class State:
                                              "halted": self.halted, "entry_day": self.entry_day,
                                              "session_id": self.session_id, "session_day": self.session_day,
                                              "session_instructions": self.session_instructions,
-                                             "session_bars": self.session_bars}, indent=1, sort_keys=True))
+                                             "session_bars": self.session_bars, "session_last_bar": self.session_last_bar,
+                                             "session_context_share": self.session_context_share}, indent=1, sort_keys=True))

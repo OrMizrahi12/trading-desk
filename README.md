@@ -44,6 +44,16 @@ today's date, a short summary of the previous trading day built from the journal
 decision) and, if the session was lost or restarted mid-day, a recap of today so far. A new session also starts when
 `CLAUDE.md` changes, so a conversation never mixes two sets of instructions.
 
+Later bars send a **delta**, not the whole snapshot (a full one is ~30k tokens, 78 of them would overflow the
+window): the new 5-minute bars (and 15-minute bars) with indicators, today's daily bar, session clock, positions, open
+orders, fills, account, STOP flag, limits, and the journal entries the session has not seen yet (the desk's verdict and
+result for its last decision). The first bar of a session, a session rebuilt after a loss, and a bar whose previous bar
+is older than the snapshot's history get the full snapshot. The journal says which (`input`: full/delta, `input_sha1`,
+`input_file`, `input_bytes`); the full snapshot is still built, hashed and saved for every bar.
+
+If the context passes 80% of the window the desk starts a new session itself (with a recap of today), so claude never
+has to compact the conversation on its own: a summary would replace the trader's exact earlier reasoning.
+
 Which instructions the trader saw: `claude` keeps the system prompt of a session's first request on resume unless told
 not to, so the desk passes `--system-prompt-snapshot off` and sends `CLAUDE.md` on every bar. The journal's
 `instructions` is the hash of the exact text sent on that bar; `session` holds the id, bar number, the hash the session

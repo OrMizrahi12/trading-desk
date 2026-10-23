@@ -187,6 +187,34 @@ def build(*, closed: pd.DataFrame, bar_start: pd.Timestamp, ib, tag: str, symbol
     }
 
 
+DELTA_NOTE = ("Only what changed since your last bar. Earlier 5-minute, 15-minute and daily bars and your own earlier "
+              "answers are in this conversation above. Positions, orders, fills, account and seatbelt status are current.")
+
+
+def delta(snap: dict, prev_bar_start: str) -> dict | None:
+    """What a resumed session needs for the bar in `snap`: the part that changed since the bar starting `prev_bar_start`.
+
+    New 5-minute bars (every one after the previous bar, so a skipped bar is not lost) and new 15-minute bars with their
+    indicators, today's daily bar (it changes on every bar), and the live state: session clock, positions, open orders,
+    fills, account, STOP-file flag, limits, and the journal entries the session has not seen (the desk's verdict and
+    the result of the last decision). None when the previous bar is older than the history in `snap`: send it all.
+    """
+    prev = pd.Timestamp(prev_bar_start)
+    rows5 = snap["bars_5min"]
+    if not rows5 or pd.Timestamp(rows5[0]["start"]) > prev.tz_convert(NY):
+        return None
+    after = lambda rows, cutoff: [r for r in rows if pd.Timestamp(r["start"]) > cutoff]  # noqa: E731
+    out = {"snapshot_kind": "delta", "note": DELTA_NOTE, "symbol": snap["symbol"], "session": snap["session"],
+           "new_bars_5min": after(rows5, prev.tz_convert(NY)),
+           # a 15-minute bar is new once it completed after the previous bar closed: start + 15 min > prev start + 5 min
+           "new_bars_15min": after(snap["bars_15min"], prev.tz_convert(NY) - pd.Timedelta(minutes=10)),
+           "today_daily_bar": snap["bars_daily"][-1:]}
+    for k in ("positions", "open_orders", "todays_fills", "account", "stop_file_present", "risk_limits"):
+        out[k] = snap[k]
+    out["recent_journal"] = [j for j in snap["recent_journal"] if j.get("bar") and pd.Timestamp(j["bar"]) >= prev]
+    return out
+
+
 def fetch_ib_daily(ib, contract) -> pd.DataFrame:
     """About 30 calendar days of IB daily bars (one throttled history request). Index = session date."""
     from ib_async import util

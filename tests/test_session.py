@@ -166,3 +166,99 @@ def test_day_summary_reports_the_facts_of_the_latest_earlier_day(tmp_path):
     assert "- bar 10:05 buy -> bought (4 shares): pullback to ema21" in text
     assert "seatbelt flatten_before_close acted" in text and text.endswith("flat, stay out")
     assert j.day_summary(before="2026-10-20") is None and Journal(tmp_path / "none").day_summary() is None
+
+
+# -- later bars send only what changed -----------------------------------------------------------
+
+import json  # noqa: E402
+
+
+def test_first_bar_gets_the_full_snapshot_and_later_bars_only_what_changed(rig, monkeypatch):
+    r = start(rig, monkeypatch)
+    r.hb.tick()
+    bar(r)
+    full, delta = r.model.calls
+    assert "bars_5min" in full and "snapshot_kind" not in full
+    assert delta["snapshot_kind"] == "delta" and "bars_5min" not in delta and "bars_daily" not in delta
+    prev, now_ = full["session"]["bar_start"], delta["session"]["bar_start"]
+    assert [b["start"] for b in delta["new_bars_5min"]] == [now_] and prev != now_
+    assert delta["new_bars_5min"][0]["ema9"] is not None and "rsi14" in delta["new_bars_5min"][0]  # with its indicators
+    assert len(delta["today_daily_bar"]) == 1
+    for k in ("session", "positions", "open_orders", "account", "stop_file_present", "risk_limits", "todays_fills"):
+        assert k in delta
+    assert delta["session"]["minutes_to_close"] < full["session"]["minutes_to_close"]  # the clock is current
+    a, b = r.records()
+    assert (a["input"], b["input"]) == ("full", "delta") and b["input_bytes"] < a["input_bytes"] / 5
+    assert json.loads(open(b["input_file"]).read()) == delta  # exactly what the trader saw is kept
+    assert b["snapshot_sha1"] and "snapshot_file" in b  # the full snapshot is still built, hashed and saved
+
+
+def test_the_intro_tells_the_trader_that_later_bars_are_deltas_and_it_is_journaled(rig, monkeypatch):
+    r = start(rig, monkeypatch)
+    r.hb.tick()
+    assert "only what changed" in r.model.sessions[0].intro and "only what changed" in r.records()[0]["session"]["intro"]
+
+
+def test_the_delta_carries_the_desks_verdict_on_the_last_decision_which_the_session_never_saw(rig, monkeypatch):
+    r = start(rig, monkeypatch, model=SessionModel([buy(stop=700.0), WAIT]))  # refused: stop above price
+    r.hb.tick()
+    bar(r)
+    last = r.model.calls[1]["recent_journal"][-1]
+    assert last["decision"]["action"] == "buy" and last["verdict"]["allowed"] is False
+
+
+def test_delta_follows_the_live_position_and_orders(rig, monkeypatch):
+    r = start(rig, monkeypatch, model=SessionModel([buy(), WAIT]))
+    r.hb.tick()
+    bar(r)
+    d = r.model.calls[1]
+    assert d["positions"] and d["positions"][0]["symbol"] == "SPY" and len(d["open_orders"]) == 2
+    assert d["recent_journal"][-1]["result"]["status"] == "bought"
+
+
+def test_a_bar_the_session_never_answered_is_not_lost_from_the_next_delta(rig, monkeypatch):
+    r = start(rig, monkeypatch, model=SessionModel([WAIT, ModelFailure("timeout"), WAIT]))
+    r.hb.tick()
+    bar(r)  # timed out: the session did not answer it
+    bar(r)
+    d = r.model.calls[2]
+    assert [b["start"] for b in d["new_bars_5min"]] == [r.model.calls[1]["session"]["bar_start"], d["session"]["bar_start"]]
+
+
+def test_three_bars_closed_while_away_arrive_in_order_each_as_a_delta_of_its_own(rig, monkeypatch):
+    r = start(rig, monkeypatch)
+    r.hb.tick()
+    bar(r, 3)
+    kinds = [c.get("snapshot_kind", "full") for c in r.model.calls]
+    assert kinds == ["full", "delta", "delta", "delta"]
+    assert [len(c["new_bars_5min"]) for c in r.model.calls[1:]] == [1, 1, 1]
+
+
+def test_a_previous_bar_older_than_the_history_falls_back_to_the_full_snapshot(rig, monkeypatch):
+    r = start(rig, monkeypatch)
+    r.hb.tick()
+    r.state.session_last_bar = "2026-10-01T14:00:00+00:00"
+    bar(r)
+    assert "bars_5min" in r.model.calls[1] and r.model.sessions[1].resume and r.records()[1]["input"] == "full"
+
+
+def test_a_new_session_after_a_lost_one_gets_the_full_snapshot_again(rig, monkeypatch):
+    r = start(rig, monkeypatch, model=SessionModel([WAIT, ModelFailure("exit_code", "No conversation found"), WAIT]))
+    r.hb.tick()
+    bar(r)
+    bar(r)
+    assert [c.get("snapshot_kind", "full") for c in r.model.calls] == ["full", "delta", "full"]
+
+
+def test_a_nearly_full_context_ends_the_session_ourselves_instead_of_leaving_it_to_compaction(rig, monkeypatch, caplog):
+    r = start(rig, monkeypatch, model=SessionModel(tokens=820_000))
+    r.hb.tick()
+    with caplog.at_level(logging.WARNING, logger="desk"):
+        r.model.tokens = 90_000
+        bar(r)
+        bar(r)
+    a, b, c = r.model.sessions
+    assert not b.resume and a.id != b.id and "Today so far" in b.intro and "2026-10-21: 1 bars handled" in b.intro
+    assert c.resume and c.id == b.id  # the new one is small, so it carries on
+    assert any("instead of letting claude compact" in x.getMessage() for x in caplog.records)
+    assert r.model.calls[1].get("snapshot_kind") is None  # and it starts with the full snapshot
