@@ -25,8 +25,14 @@ def runner(stdout="", returncode=0, stderr="", raises=None):
     return run
 
 
-def reply(**kw):
-    return json.dumps({"is_error": False, "result": "x", "structured_output": {"action": "wait"}, **kw})
+def reply(*events, **kw):
+    """What `claude -p --output-format stream-json --verbose` prints: one JSON event per line, the result last."""
+    result = {"type": "result", "is_error": False, "result": "x", "structured_output": {"action": "wait"}, **kw}
+    return "\n".join(json.dumps(e) for e in [{"type": "system", "subtype": "init"}, *events, result])
+
+
+def skill_call(name, **kw):
+    return {"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "Skill", "input": {"skill": name}}]}, **kw}
 
 
 def test_call_shape():
@@ -37,6 +43,7 @@ def test_call_shape():
     assert json.loads(cmd[cmd.index("--json-schema") + 1]) == SCHEMA
     assert cmd[cmd.index("--tools") + 1] == "Skill"  # the only tool: loading the desk's skills
     assert "--no-session-persistence" in cmd
+    assert cmd[cmd.index("--output-format") + 1] == "stream-json" and "--verbose" in cmd  # so Skill calls are visible
     assert cmd[cmd.index("--system-prompt") + 1] == INSTRUCTIONS.read_text()
     assert cmd[cmd.index("--setting-sources") + 1] == ""  # no user/project/local files: CLAUDE.md reaches the model once, alone
     assert cmd[cmd.index("--plugin-dir") + 1] == str(run.seen["cwd"])  # how the skills in .claude/skills reach the trader
@@ -50,8 +57,9 @@ def test_call_shape():
     (runner(raises=FileNotFoundError("claude")), "not_started"),
     (runner(returncode=1, stderr="boom"), "exit_code"),
     (runner("not json"), "bad_output"),
-    (runner(json.dumps({"is_error": True, "result": "overloaded"})), "error"),
-    (runner(json.dumps({"is_error": False, "result": "text only"})), "bad_output"),
+    (runner(json.dumps({"type": "result", "is_error": True, "result": "overloaded"})), "error"),
+    (runner(json.dumps({"type": "result", "is_error": False, "result": "text only"})), "bad_output"),
+    (runner(json.dumps({"type": "system", "subtype": "init"})), "bad_output"),  # the stream ended with no result
 ])
 def test_failures_raise_model_failure(run, kind):
     with pytest.raises(ModelFailure) as err:
@@ -124,6 +132,11 @@ def session_reply(**kw):
                  modelUsage={"claude-x": {"contextWindow": 1_000_000}}, **kw)
 
 
+def session_reply_with(*events):
+    return reply(*events, session_id="abc-1", usage={**USAGE, "iterations": [USAGE]}, total_cost_usd=0.0123,
+                 modelUsage={"claude-x": {"contextWindow": 1_000_000}})
+
+
 def test_new_session_is_started_with_its_id_and_the_intro_in_the_first_message():
     run = runner(session_reply())
     uid = "11111111-1111-4111-8111-111111111111"
@@ -165,5 +178,41 @@ def test_context_size_is_input_plus_cached_input_of_the_last_request():
 def test_context_is_reported_even_when_the_answer_is_unusable_and_the_reported_session_id_wins():
     s = Session("mine")
     with pytest.raises(ModelFailure):
-        ClaudeModel(run=runner(json.dumps({"is_error": False, "session_id": "theirs", "usage": USAGE}))).decide({}, 5, s)
+        ClaudeModel(run=runner(json.dumps({"type": "result", "is_error": False, "session_id": "theirs", "usage": USAGE}))).decide({}, 5, s)
     assert s.context["tokens"] == 21_503 and s.id == "theirs"
+
+
+# -- which skills were loaded: read from claude's own Skill tool calls --------------------------------
+
+def test_skills_loaded_are_taken_from_the_skill_tool_calls_in_order():
+    other_tool = {"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "StructuredOutput", "input": {}}]}}
+    run = runner(session_reply_with(skill_call("desk:market-read"), skill_call("desk:entry-checklist"), other_tool))
+    s = Session("abc-1", resume=True)
+    ClaudeModel(run=run).decide({}, 60, s)
+    assert s.skills == ["desk:market-read", "desk:entry-checklist"]
+
+
+def test_a_bar_with_no_skill_call_reports_an_empty_list_not_unknown():
+    s = Session("abc-1", resume=True)
+    ClaudeModel(run=runner(reply())).decide({}, 60, s)
+    assert s.skills == []
+
+
+def test_skills_named_only_in_the_text_or_by_a_subagent_do_not_count():
+    talk = {"type": "assistant", "message": {"content": [{"type": "text", "text": "I used desk:market-read"}]}}
+    sub = skill_call("desk:trade-management", parent_tool_use_id="toolu_1")
+    s = Session("abc-1", resume=True)
+    ClaudeModel(run=runner(reply(talk, sub))).decide({}, 60, s)
+    assert s.skills == []
+
+
+def test_skills_are_known_even_when_the_answer_is_unusable_and_unknown_on_a_timeout():
+    s = Session("mine")
+    bad = json.dumps({"type": "result", "is_error": False})
+    with pytest.raises(ModelFailure):
+        ClaudeModel(run=runner(json.dumps(skill_call("desk:market-read")) + "\n" + bad)).decide({}, 5, s)
+    assert s.skills == ["desk:market-read"]
+    t = Session("mine")
+    with pytest.raises(ModelFailure):
+        ClaudeModel(run=runner(raises=subprocess.TimeoutExpired("claude", 5))).decide({}, 5, t)
+    assert t.skills is None

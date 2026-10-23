@@ -21,7 +21,8 @@ class Session:
     """One Claude conversation, kept for the whole trading day. `resume` False = start it with `id`, True = continue it.
 
     `intro` is extra text for the first message of a new session (today's date, a summary of the day before).
-    The model fills `instructions` (hash of the exact text it sent as system prompt) and `context` (token counts).
+    The model fills `instructions` (hash of the exact text it sent as system prompt), `context` (token counts) and
+    `skills` (the desk skills claude loaded with its Skill tool on this bar, in order; None = not known, e.g. a timeout).
     """
 
     id: str
@@ -29,6 +30,7 @@ class Session:
     intro: str = ""
     instructions: str | None = None
     context: dict = field(default_factory=dict)
+    skills: list[str] | None = None
 
 
 class ModelFailure(RuntimeError):
@@ -63,6 +65,30 @@ def instructions_hash(constitution: str | None = None) -> str:
     return digest.hexdigest()[:12]
 
 
+def parse_stream(stdout: str) -> tuple[dict | None, list[str]]:
+    """Split `--output-format stream-json` output into the final result event and the skills loaded on the way.
+
+    The skills come from claude's own `Skill` tool calls (assistant `tool_use` blocks), not from the model's words.
+    Lines that are not JSON are ignored; a stream with no result event gives None.
+    """
+    result, skills = None, []
+    for line in stdout.splitlines():
+        try:
+            event = json.loads(line)
+        except ValueError:
+            continue
+        if not isinstance(event, dict):
+            continue
+        if event.get("type") == "result":
+            result = event
+        elif event.get("type") == "assistant" and not event.get("parent_tool_use_id"):  # the trader's own calls only
+            content = (event.get("message") or {}).get("content")
+            for block in content if isinstance(content, list) else []:
+                if isinstance(block, dict) and block.get("type") == "tool_use" and block.get("name") == "Skill":
+                    skills.append(str((block.get("input") or {}).get("skill", "?")))
+    return result, skills
+
+
 def context_usage(out: dict) -> dict:
     """How big the conversation was on the last request: input + cached input tokens (what the model had to read).
 
@@ -86,7 +112,7 @@ class ClaudeModel:
     def command(self, session: Session | None = None) -> list[str]:
         text = INSTRUCTIONS.read_text()  # read once: the hash we report is of exactly the text we send
         cmd = [self.executable, "-p", (session.intro + "\n\n" if session and session.intro else "") + PROMPT,
-               "--output-format", "json", "--json-schema", json.dumps(SCHEMA),
+               "--output-format", "stream-json", "--verbose", "--json-schema", json.dumps(SCHEMA),  # stream-json lists every tool call; json does not
                "--tools", "Skill", "--system-prompt", text,
                "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}',
                "--setting-sources", "",  # no settings or CLAUDE.md files: the system prompt carries the constitution once
@@ -112,15 +138,16 @@ class ClaudeModel:
             raise ModelFailure("not_started", str(exc)) from None
         if done.returncode != 0:
             raise ModelFailure("exit_code", f"{done.returncode}: {done.stderr.strip()[:300]}")
-        try:
-            out = json.loads(done.stdout)
-        except ValueError:
-            raise ModelFailure("bad_output", f"stdout is not JSON: {done.stdout[:200]!r}") from None
-        if session is not None and isinstance(out, dict):
+        out, skills = parse_stream(done.stdout)
+        if out is None:
+            raise ModelFailure("bad_output", f"no result event in stdout: {done.stdout[:200]!r}")
+        if session is not None:
+            session.skills = skills
+        if session is not None:
             session.context = context_usage(out)  # even a bad answer cost context
             session.id = out.get("session_id") or session.id  # the id claude reports is the one to resume next time
-        if not isinstance(out, dict) or out.get("is_error"):
-            raise ModelFailure("error", str(out.get("result", out))[:300] if isinstance(out, dict) else "not an object")
+        if out.get("is_error"):
+            raise ModelFailure("error", str(out.get("result", out))[:300])
         if "structured_output" not in out:
             raise ModelFailure("bad_output", "no structured_output in the answer")
         return out["structured_output"]

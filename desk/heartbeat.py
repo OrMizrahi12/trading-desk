@@ -225,6 +225,7 @@ class Heartbeat:
         if session.intro:
             record["session"]["intro"] = session.intro  # the extra text the trader saw first, beside CLAUDE.md
             record["session"]["intro_sha1"] = text_hash(session.intro)
+        record["skills"] = session.skills  # skills claude loaded on this bar (from its Skill tool calls); None = unknown
         if session.context:
             record["context"] = session.context
             c = session.context

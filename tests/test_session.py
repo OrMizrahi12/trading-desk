@@ -15,12 +15,14 @@ DAY2, DAY3 = "2026-10-20", "2026-10-21"
 class SessionModel(FakeModel):
     """Like the real one: reports the hash of the instructions it sent and how big the context is."""
 
-    def __init__(self, answers=None, tokens=25_000, window=1_000_000, sent="h1", step=0.02):
+    def __init__(self, answers=None, tokens=25_000, window=1_000_000, sent="h1", step=0.02, skills=()):
         super().__init__(answers)
+        self.skills = list(skills)  # one list of skills per bar, used in turn; the rest of the bars load none
         self.tokens, self.window, self.sent, self.step, self.totals = tokens, window, sent, step, {}
 
     def decide(self, snapshot, timeout_s, session=None):
         session.instructions = self.sent
+        session.skills = self.skills.pop(0) if self.skills else []
         self.totals[session.id] = self.totals.get(session.id, 0) + self.step  # like claude: a running total per session
         session.context = {"tokens": self.tokens, "window": self.window, "output_tokens": 80, "session_cost_usd": self.totals[session.id]}
         return super().decide(snapshot, timeout_s, session)
@@ -309,3 +311,23 @@ def test_the_cost_total_survives_a_restart(rig, monkeypatch):
     r.hb = r.make_heartbeat()
     bar(r)
     assert [round(x["context"]["bar_cost_usd"], 2) for x in r.records()] == [0.04, 0.04]
+
+
+# -- skills: the journal says which ones the trader loaded on each bar ----------------------------
+
+def test_each_bar_journals_the_skills_the_trader_loaded_so_on_demand_loading_is_visible(rig, monkeypatch):
+    model = SessionModel(skills=[["desk:market-read"], [], ["desk:market-read", "desk:entry-checklist"]])
+    r = start(rig, monkeypatch, model=model)
+    r.hb.tick()
+    bar(r, 2)
+    assert [x["skills"] for x in r.records()] == [["desk:market-read"], [], ["desk:market-read", "desk:entry-checklist"]]
+
+
+def test_a_bar_with_no_model_answer_journals_unknown_skills_not_none_loaded(rig, monkeypatch):
+    class Down(SessionModel):
+        def decide(self, snapshot, timeout_s, session=None):
+            raise ModelFailure("timeout", "slow")
+
+    r = start(rig, monkeypatch, model=Down())
+    r.hb.tick()
+    assert r.records()[0]["skills"] is None
