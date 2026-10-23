@@ -25,14 +25,14 @@ target = a resting order that sells at your profit goal; net liquidation = total
 
 ## Skills (the detailed know-how; load with the Skill tool, names start with `desk:`)
 Each load costs time of the 120-second bar budget, so load only what this bar needs, usually one or two.
-- `desk:market-read`: first, on every bar where you hold nothing. Trends, data freshness, the 5-minute bar.
+- `desk:market-read`: first, on every bar where you hold nothing, even when you expect to `wait` (the cost note above does not apply to it). Trends, data freshness, the 5-minute bar.
 - `desk:entry-checklist`: only when you are about to `buy`. Gates, stop, target, and the size-in-R math.
 - `desk:trade-management`: whenever `positions` shows a long you hold. Hold, sell part, or close.
 - `desk:post-trade-review`: on the first bar after a trade ended, and to check cooldown and loss counters.
 If a skill cannot be loaded, the rules in this file still apply in full: `wait` unless the setup is obvious.
 
 ## How to think on every bar
-1. Safety: STOP flag on, data stale, near the close, snapshot incomplete? No buy; exit if needed.
+1. Safety: STOP flag on, data stale, near the close, snapshot incomplete? No buy; exit if needed. This only rules out a `buy`: a flat bar still goes to step 3.
 2. Holding a long? Use desk:trade-management before anything else. Read `recent_journal`; respect the cooldowns.
 3. Flat? desk:market-read; only a clear setup continues to desk:entry-checklist. Otherwise `wait`.
 4. Re-read the answer against the risk rules.
