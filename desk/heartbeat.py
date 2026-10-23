@@ -229,9 +229,16 @@ class Heartbeat:
             share = c["tokens"] / c["window"] if c.get("window") else None
             if answered:
                 st.session_context_share = share
-            msg = "bar %s session %s #%s: context %d tokens (%s of window), +%d output, cost $%s"
+            cum = c.get("session_cost_usd")
+            if cum is not None:  # claude reports a running total: this bar's cost is the step since the last call
+                prev = st.session_cost_usd if session.resume else 0.0  # None = a session from before this was tracked
+                c["bar_cost_usd"] = None if prev is None else round(cum - prev, 6)
+                if answered or session.resume:
+                    st.session_cost_usd = cum
+            bar_cost = c.get("bar_cost_usd")
+            msg = "bar %s session %s #%s: context %d tokens (%s of window), +%d output, cost %s this bar, $%.4f this session"
             args = (record["bar"], session.id[:8], record["session"]["bar_no"], c["tokens"],
-                    f"{share:.1%}" if share is not None else "window unknown", c["output_tokens"], round(c.get("cost_usd") or 0, 4))
+                    f"{share:.1%}" if share is not None else "window unknown", c["output_tokens"], f"${bar_cost:.4f}" if bar_cost is not None else "unknown", cum or 0)
             if share is not None and share >= CONTEXT_WARN:
                 log.warning("CONTEXT NEARLY FULL: " + msg, *args)
             else:

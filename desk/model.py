@@ -59,7 +59,7 @@ def context_usage(out: dict) -> dict:
     parts = {k: int(last.get(k) or 0) for k in ("input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens")}
     windows = [m.get("contextWindow") for m in (out.get("modelUsage") or {}).values() if m.get("contextWindow")]
     return {"tokens": sum(parts.values()), **parts, "output_tokens": int(last.get("output_tokens") or 0),
-            "window": max(windows) if windows else None, "cost_usd": out.get("total_cost_usd")}
+            "window": max(windows) if windows else None, "session_cost_usd": out.get("total_cost_usd")}  # claude's running total for the session
 
 
 class ClaudeModel:

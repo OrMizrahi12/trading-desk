@@ -58,7 +58,7 @@ Which instructions the trader saw: `claude` keeps the system prompt of a session
 not to, so the desk passes `--system-prompt-snapshot off` and sends `CLAUDE.md` on every bar. The journal's
 `instructions` is the hash of the exact text sent on that bar; `session` holds the id, bar number, the hash the session
 started with and, on a new session, the intro text itself (`intro`, `intro_sha1`). Each bar also logs and journals
-`context`: tokens the model read (input + cached input), output tokens, cost and the window; a warning at 70% of the window.
+`context`: tokens the model read (input + cached input), output tokens, the window, `bar_cost_usd` (this bar, list price) and `session_cost_usd` (running total; records before 2026-10-23 15:00 have the total as `cost_usd`); a warning at 70% of the window.
 If a stored session cannot be resumed the bar becomes `wait` and the next bar starts a new session with a recap.
 
 Each bar has a 120-second budget. Python never filters or decides: the model sees every bar; Python can only

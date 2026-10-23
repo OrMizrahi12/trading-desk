@@ -15,13 +15,14 @@ DAY2, DAY3 = "2026-10-20", "2026-10-21"
 class SessionModel(FakeModel):
     """Like the real one: reports the hash of the instructions it sent and how big the context is."""
 
-    def __init__(self, answers=None, tokens=25_000, window=1_000_000, sent="h1"):
+    def __init__(self, answers=None, tokens=25_000, window=1_000_000, sent="h1", step=0.02):
         super().__init__(answers)
-        self.tokens, self.window, self.sent = tokens, window, sent
+        self.tokens, self.window, self.sent, self.step, self.totals = tokens, window, sent, step, {}
 
     def decide(self, snapshot, timeout_s, session=None):
         session.instructions = self.sent
-        session.context = {"tokens": self.tokens, "window": self.window, "output_tokens": 80, "cost_usd": 0.01}
+        self.totals[session.id] = self.totals.get(session.id, 0) + self.step  # like claude: a running total per session
+        session.context = {"tokens": self.tokens, "window": self.window, "output_tokens": 80, "session_cost_usd": self.totals[session.id]}
         return super().decide(snapshot, timeout_s, session)
 
 
@@ -262,3 +263,49 @@ def test_a_nearly_full_context_ends_the_session_ourselves_instead_of_leaving_it_
     assert c.resume and c.id == b.id  # the new one is small, so it carries on
     assert any("instead of letting claude compact" in x.getMessage() for x in caplog.records)
     assert r.model.calls[1].get("snapshot_kind") is None  # and it starts with the full snapshot
+
+
+# -- cost: claude reports a running total per session, the journal needs each bar's own cost -------
+
+def test_each_bar_journals_its_own_cost_and_the_running_total(rig, monkeypatch, caplog):
+    r = start(rig, monkeypatch, model=SessionModel(step=0.02))
+    with caplog.at_level(logging.INFO, logger="desk"):
+        r.hb.tick()
+        bar(r, 2)
+    ctx = [x["context"] for x in r.records()]
+    assert [c["bar_cost_usd"] for c in ctx] == [0.02, 0.02, 0.02]
+    assert [round(c["session_cost_usd"], 2) for c in ctx] == [0.02, 0.04, 0.06]
+    assert round(r.state.session_cost_usd, 2) == 0.06
+    assert any("cost $0.0200 this bar, $0.0600 this session" in x.getMessage() for x in caplog.records)
+
+
+def test_a_new_session_starts_its_cost_from_zero_and_does_not_inherit_the_old_total(rig, monkeypatch):
+    r = start(rig, monkeypatch, model=SessionModel(step=0.05))
+    r.hb.tick()
+    bar(r)
+    monkeypatch.setattr(heartbeat, "instructions_hash", lambda: "h2")
+    r.model.sent = "h2"
+    bar(r)  # new session: its first call costs 0.05, not 0.15 - 0.10
+    ctx = [x["context"] for x in r.records()]
+    assert [c["bar_cost_usd"] for c in ctx] == [0.05, 0.05, 0.05] and ctx[2]["session_cost_usd"] == 0.05
+
+
+def test_cost_of_a_session_from_before_tracking_is_unknown_for_one_bar_then_exact(rig, monkeypatch):
+    r = start(rig, monkeypatch, model=SessionModel(step=0.03))
+    r.hb.tick()
+    r.state.session_cost_usd = None  # state file written by the previous version
+    r.model.totals[r.state.session_id] = 0.5
+    bar(r)
+    bar(r)
+    c = [x["context"] for x in r.records()]
+    assert c[1]["bar_cost_usd"] is None and round(c[1]["session_cost_usd"], 2) == 0.53
+    assert round(c[2]["bar_cost_usd"], 2) == 0.03
+
+
+def test_the_cost_total_survives_a_restart(rig, monkeypatch):
+    r = start(rig, monkeypatch, model=SessionModel(step=0.04))
+    r.hb.tick()
+    r.state = State.load(r.state.path.parent)
+    r.hb = r.make_heartbeat()
+    bar(r)
+    assert [round(x["context"]["bar_cost_usd"], 2) for x in r.records()] == [0.04, 0.04]

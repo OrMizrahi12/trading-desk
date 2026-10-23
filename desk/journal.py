@@ -126,6 +126,7 @@ class State:
     session_instructions: str | None = None  # instructions hash when the session started; a change rolls it over
     session_bars: int = 0  # bars answered in it so far
     session_last_bar: str | None = None  # start of the last bar the session answered: later bars send what changed since
+    session_cost_usd: float | None = None  # claude's running cost total for the session, to get each bar's own cost
     session_context_share: float | None = None  # how full its context window was after that bar
 
     @classmethod
@@ -142,6 +143,7 @@ class State:
                 setattr(state, k, data.get(k))
             state.session_bars = data.get("session_bars", 0)
             state.session_last_bar = data.get("session_last_bar")
+            state.session_cost_usd = data.get("session_cost_usd")
             state.session_context_share = data.get("session_context_share")
         return state
 
@@ -151,4 +153,5 @@ class State:
                                              "session_id": self.session_id, "session_day": self.session_day,
                                              "session_instructions": self.session_instructions,
                                              "session_bars": self.session_bars, "session_last_bar": self.session_last_bar,
+                                             "session_cost_usd": self.session_cost_usd,
                                              "session_context_share": self.session_context_share}, indent=1, sort_keys=True))

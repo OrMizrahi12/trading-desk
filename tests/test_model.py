@@ -107,7 +107,7 @@ def test_context_size_is_input_plus_cached_input_of_the_last_request():
     s = Session("abc-1", resume=True)
     ClaudeModel(run=run).decide({}, 60, s)
     assert s.context == {"tokens": 21_503, "input_tokens": 3, "cache_read_input_tokens": 20_000,
-                         "cache_creation_input_tokens": 1_500, "output_tokens": 90, "window": 1_000_000, "cost_usd": 0.0123}
+                         "cache_creation_input_tokens": 1_500, "output_tokens": 90, "window": 1_000_000, "session_cost_usd": 0.0123}
     assert context_usage({})["tokens"] == 0  # a reply without usage does not crash
 
 
