@@ -170,9 +170,9 @@ def test_slow_model_leaves_no_time_to_buy_but_the_bar_is_journaled_over_budget(r
     r = rig(answers=[buy()])
     original = r.model.decide
 
-    def slow(snapshot, timeout_s):
+    def slow(snapshot, timeout_s, session=None):
         r.mono[0] += 110  # the model used up 110 of the 120 seconds
-        return original(snapshot, timeout_s)
+        return original(snapshot, timeout_s, session)
 
     r.model.decide = slow
     r.hb.tick()
@@ -188,9 +188,9 @@ def test_close_is_still_sent_when_the_budget_is_nearly_used(rig):
     r.now = r.now + __import__("pandas").Timedelta(minutes=5)
     original = r.model.decide
 
-    def slow(snapshot, timeout_s):
+    def slow(snapshot, timeout_s, session=None):
         r.mono[0] += 115
-        return original(snapshot, timeout_s)
+        return original(snapshot, timeout_s, session)
 
     r.model.decide = slow
     r.hb.tick()

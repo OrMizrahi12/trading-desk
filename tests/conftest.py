@@ -53,11 +53,12 @@ class FakeModel:
     """Answers from a list (last one repeats) or a function of the snapshot. Records every call."""
 
     def __init__(self, answers=None):
-        self.answers, self.calls, self.timeouts = answers or [WAIT], [], []
+        self.answers, self.calls, self.timeouts, self.sessions = answers or [WAIT], [], [], []
 
-    def decide(self, snapshot, timeout_s):
+    def decide(self, snapshot, timeout_s, session=None):
         self.calls.append(snapshot)
         self.timeouts.append(timeout_s)
+        self.sessions.append(session)
         a = self.answers(snapshot) if callable(self.answers) else self.answers[min(len(self.calls), len(self.answers)) - 1]
         if isinstance(a, Exception):
             raise a

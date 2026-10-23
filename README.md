@@ -22,7 +22,7 @@ for every closed 5-minute SPY bar:
 1. polls the lab's bar feed (`~/trading-lab/live/feed.py`) and builds a snapshot: 5-minute, 15-minute and daily bars
    with indicators, positions, open orders, account, session clock, the STOP-file flag and the last journal entries
    (written to `data/desk/snapshots/`);
-2. runs `claude -p` in this folder with a JSON schema: `action` (buy / sell / close / wait), `size_r`, `stop`,
+2. runs `claude -p` in this folder, inside **one Claude conversation per New York trading day** (see below), with a JSON schema: `action` (buy / sell / close / wait), `size_r`, `stop`,
    `target`, `reason`. **R** = 1% of the account's value, the money lost if the stop is hit;
 3. validates the answer (anything invalid or missing becomes `wait`), then the gates: STOP file (blocks buys; exits
    still pass), bar age, session time, no adding to a position, lab risk limits;
@@ -35,6 +35,21 @@ the new bars are handled, even if the feed is down) and a sale of any position c
 (never overnight). This is Python enforcing the rules, not trading. Every time one acts it is logged
 (`SEATBELT ...`) and journaled (`seatbelt` records, or `seatbelts` on the bar's record). If a sale cannot be
 confirmed, or no price is known, the desk halts for a person to look.
+
+## One conversation per day
+
+The first bar of a day starts a Claude session (`--session-id`, id kept in `data/desk/state.json`); every later bar
+continues it (`--resume`), so the trader remembers its own reasoning from earlier today. The first message holds
+today's date, a short summary of the previous trading day built from the journal (counts, trades, seatbelts, the last
+decision) and, if the session was lost or restarted mid-day, a recap of today so far. A new session also starts when
+`CLAUDE.md` changes, so a conversation never mixes two sets of instructions.
+
+Which instructions the trader saw: `claude` keeps the system prompt of a session's first request on resume unless told
+not to, so the desk passes `--system-prompt-snapshot off` and sends `CLAUDE.md` on every bar. The journal's
+`instructions` is the hash of the exact text sent on that bar; `session` holds the id, bar number, the hash the session
+started with and, on a new session, the intro text itself (`intro`, `intro_sha1`). Each bar also logs and journals
+`context`: tokens the model read (input + cached input), output tokens, cost and the window; a warning at 70% of the window.
+If a stored session cannot be resumed the bar becomes `wait` and the next bar starts a new session with a recap.
 
 Each bar has a 120-second budget. Python never filters or decides: the model sees every bar; Python can only
 refuse an unsafe decision. `sell` only reduces a long position (no shorting). Tests: `uv run pytest` (fake model,
