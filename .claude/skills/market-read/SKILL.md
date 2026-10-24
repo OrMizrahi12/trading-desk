@@ -1,6 +1,6 @@
 ---
 name: market-read
-description: Use on every bar before deciding anything new, to read the snapshot - daily trend, 15-minute trend, the latest 5-minute bar, and whether the data is fresh and complete enough to trade. Use it again whenever you doubt what the market is doing. It ends with a verdict (uptrend / downtrend / chop / unclear) and a data verdict (usable / not usable). It does not choose a stop, target or size (that is entry-checklist).
+description: Use FIRST on every bar where you hold nothing, even when you expect to wait and before judging the data yourself (thin volume or a stale bar are findings of this skill, not reasons to skip it). It reads the snapshot - daily trend, 15-minute trend, the latest 5-minute bar, and whether the data is fresh and complete enough to trade. Use it again whenever you doubt what the market is doing. It ends with a verdict (uptrend / downtrend / chop / unclear) and a data verdict (usable / not usable). It does not choose a stop, target or size (that is entry-checklist).
 ---
 
 # Market read
