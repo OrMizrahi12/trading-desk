@@ -26,6 +26,13 @@ NY = "America/New_York"
 BAR = pd.Timedelta(minutes=BAR_MINUTES)
 ROWS = {"5min": 100, "15min": 60, "daily": 30}  # how many of the latest bars of each size the model sees
 _CAL = xcals.get_calendar("XNYS")
+# The paper account's market data is delayed by 15 minutes, so IB's newest bars are still being filled when the wall
+# clock says they are over: measured on the desk's saved snapshots, a bar seen 12 minutes after its close held 21% of its
+# final volume and was complete only from about 15 minutes (see tests/test_settled.py). A bar is "settled" once its end is
+# DATA_DELAY_MIN + SETTLE_MARGIN_MIN old. Only the newest bar the feed returns can be unsettled.
+DATA_DELAY_MIN = 15.0
+SETTLE_MARGIN_MIN = 1.0
+SETTLE_MIN = DATA_DELAY_MIN + SETTLE_MARGIN_MIN
 
 
 def _clean(value):
@@ -163,6 +170,17 @@ def todays_fills(ib) -> list[dict]:
                  "price": float(f.execution.price)} for f in ib.fills()][-10:]
     except Exception:
         return []
+
+
+def settled_bars(closed: pd.DataFrame, now: pd.Timestamp, delay_min: float = SETTLE_MIN) -> pd.DataFrame:
+    """The bars of `closed` that are final: those that ended at least `delay_min` minutes before `now`.
+
+    The lab's feed keeps a bar once its 5 minutes are over by the wall clock, but with delayed data IB is still filling the
+    newest one (a close and volume that change on the next poll). A decision on it is a decision on a bar that does not
+    exist yet in that form. `delay_min` 0 keeps every closed bar (tests of other things)."""
+    if delay_min <= 0:
+        return closed
+    return closed[closed.index + BAR <= now - pd.Timedelta(minutes=delay_min)]
 
 
 def build(*, closed: pd.DataFrame, bar_start: pd.Timestamp, ib, tag: str, symbol: str, now: pd.Timestamp,

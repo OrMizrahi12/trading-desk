@@ -50,7 +50,7 @@ class Desk:
     """What the tool functions need besides `ib`: the worker, the risk limits, the state/journal, the clock."""
 
     def __init__(self, worker: IBWorker, *, risk: Risk | None = None, root: Path = MCP_DIR, clock=utc_now,
-                 delay_log: Path | None = None, executor_kwargs: dict | None = None, heartbeat_dir: Path = DESK_DIR):
+                 delay_log: Path | None = None, executor_kwargs: dict | None = None, heartbeat_dir: Path = DESK_DIR, settle_min: float = snapshot.SETTLE_MIN):
         self.worker, self.root, self.clock = worker, Path(root), clock
         self.heartbeat_dir = Path(heartbeat_dir)  # the heartbeat's journal folder (read by search_journal only)
         self.executor_kwargs = executor_kwargs or {}  # e.g. {"timeout_s": 2} in tests
@@ -61,6 +61,7 @@ class Desk:
         self.journal = Journal(self.root)
         self.state = State.load(self.root)
         self.delay_log = delay_log
+        self.settle_min = settle_min  # bars newer than this are still being filled by IB (snapshot.settled_bars)
         self._parts: tuple | None = None
         self._contracts: dict[str, object] = {}
 
@@ -85,10 +86,13 @@ class Desk:
 
     def market(self, ib) -> SimpleNamespace:
         """The newest CLOSED 5-minute bar of SPY, and the session facts around it (what the heartbeat's gates read)."""
-        closed = self.parts(ib).feed.poll()
-        if closed.empty:
-            raise Refused("IB returned no closed 5-minute bars for SPY (market holiday or no data)")
         now = self.clock()
+        raw = self.parts(ib).feed.poll()
+        closed = snapshot.settled_bars(raw, now, self.settle_min)
+        if closed.empty:
+            raise Refused("IB returned no finished 5-minute bars for SPY (market holiday, no data, or the newest bar is "
+                          "still being filled: delayed data settles about 16 minutes after a bar's close)" if len(raw)
+                          else "IB returned no closed 5-minute bars for SPY (market holiday or no data)")
         bar_start = closed.index[-1]
         return SimpleNamespace(closed=closed, bar_start=bar_start, ref_price=float(closed["close"].iloc[-1]), now=now,
                                session=snapshot.session_info(now, bar_start, bar_start))

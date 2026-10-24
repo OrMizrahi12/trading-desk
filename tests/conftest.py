@@ -101,7 +101,7 @@ class Rig:
         last = self.bars.index[self.feed.shown - 1]
         self.now = now or last + pd.Timedelta(minutes=12)  # the delayed feed shows a bar ~12 min after it closed
         self.mono = [0.0]
-        self.kw = kw
+        self.kw = {"settle_min": 0.0, **kw}  # the fake feed has no data delay; tests of the delay pass settle_min themselves
         self.hb = self.make_heartbeat()
 
     def make_heartbeat(self):

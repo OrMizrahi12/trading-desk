@@ -217,3 +217,15 @@ Claude cannot change size, stop or target. Claude is asked only when there is a 
 invalid or missing answer is a `wait`. Held positions are managed by the stop and the pre-close flatten, not by Claude. All
 desk gates still apply after an approval. Cannot be combined with `--team` or `--regime-gate`. Journal: `orb_veto` (signal,
 Claude's verdict, cost). Replay: `uv run -m desk.orb_replay [--ask]` (`--ask` makes real Claude calls). Tests: `tests/test_orb_veto.py`.
+
+## Finished bars only (data fix)
+
+The paper account's data is 15 minutes delayed. IB therefore only returns bars that started 15 or more minutes ago, and the
+newest of them is **still being filled**: its close, high, low and volume change on the next poll. The lab's feed
+(`live/feed.py`, read-only here) keeps a bar as soon as the wall clock says its 5 minutes are over, so until now the desk
+decided on that partial bar. Measured on the 79 saved snapshots: the newest bar differed from its final version in 63, the
+second newest in none, and a bar seen 12 minutes after its close held a median 21% of its final volume (complete from about
+15 minutes). `snapshot.settled_bars` now drops every bar whose end is less than 16 minutes old (15 delay + 1 margin) before the
+heartbeat (and the MCP trade path) look at it, so a bar is decided on about 16-21 minutes after its close, still inside the
+30-minute stale limit. The flatten seatbelt keeps the newest known price. Tests: `tests/test_settled.py`. The lab's own live
+engine (`live/runner`) uses the same feed and is not changed here.

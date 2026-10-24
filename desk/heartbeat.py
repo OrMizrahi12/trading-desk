@@ -50,7 +50,8 @@ class Heartbeat:
     def __init__(self, *, ib, contract, feed, model: Model, executor, broker, risk, journal: Journal, state: State,
                  symbol: str = "SPY", clock=utc_now, mono=time.monotonic, budget_s: float = BUDGET_S,
                  model_timeout_s: float = MODEL_TIMEOUT_S, min_exec_s: float = MIN_EXEC_S, fetch_daily=None,
-                 lab_journal=None, limits_check=None, scribe=None, regime_gate: bool = False):
+                 lab_journal=None, limits_check=None, scribe=None, regime_gate: bool = False,
+                 settle_min: float = snapshot.SETTLE_MIN):
         self.ib, self.contract, self.feed, self.model = ib, contract, feed, model
         self.executor, self.broker, self.risk = executor, broker, risk
         self.journal, self.state, self.symbol, self.tag = journal, state, symbol, broker.tag
@@ -62,6 +63,7 @@ class Heartbeat:
         self._daily: tuple[str, pd.DataFrame | None] | None = None
         self._last_close: float | None = None  # newest known price, for the flatten seatbelt
         self._missed_day: str | None = None
+        self.settle_min = settle_min  # a bar is decided on only once IB has finished it (snapshot.settled_bars)
         self.regime_gate = regime_gate  # True = ask the model only on bars regime.decide() wakes it for
         self._fills_seen: int | None = None  # fills today at the last handled bar (None = none yet: wake)
 
@@ -76,7 +78,8 @@ class Heartbeat:
         except Exception as exc:  # the flatten seatbelt must still run when the feed is down
             closed, poll_error = None, exc
         if closed is not None and not closed.empty:
-            self._last_close = float(closed["close"].iloc[-1])
+            self._last_close = float(closed["close"].iloc[-1])  # newest known price, even from a bar still being filled
+            closed = snapshot.settled_bars(closed, self.clock(), self.settle_min)  # but only finished bars are decided on
         self._seatbelt_flatten(self.clock())
         self._close_out(self.clock())  # a stop or target may have filled since the last poll
         if poll_error is not None:

@@ -68,7 +68,7 @@ class McpRig:
         self.ib.history["5 mins"] = to_bar_data(self.bars.iloc[:shown])
         self.worker = IBWorker(connect=lambda: self.ib)
         self.desk = Desk(self.worker, risk=self.risk, root=tmp_path / "mcp", clock=lambda: self.now,
-                         executor_kwargs={"timeout_s": 2}, heartbeat_dir=tmp_path / "heartbeat")
+                         executor_kwargs={"timeout_s": 2}, heartbeat_dir=tmp_path / "heartbeat", settle_min=0.0)
         self.desk.parts(self.ib).feed = FakeFeed(self.bars, shown)  # the heartbeat's own tests use the same scripted feed
         self.mcp = create_server(self.desk, read_only=read_only, watch_s=0)
         self.ref = self.ib.market_price
