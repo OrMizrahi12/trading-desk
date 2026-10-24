@@ -65,6 +65,31 @@ Each bar has a 120-second budget. Python never filters or decides: the model see
 refuse an unsafe decision. `sell` only reduces a long position (no shorting). Tests: `uv run pytest` (fake model,
 fake IB, no network).
 
+## The team (optional: `uv run -m desk --team`)
+
+An analyst, a risk manager and a devil's advocate give their views before the trader decides. Each is a short file in
+`.claude/agents/` (`analyst.md`, `risk-manager.md`, `devils-advocate.md`) and runs as its own fresh `claude -p` call: no
+tools, no memory, the bar's **full** snapshot on stdin, an answer in a strict JSON schema. `desk/team.py` runs the protocol
+in code, so the order does not depend on the model following instructions:
+
+1. The analyst is asked first on every bar: `buy` / `sell` / `close` / `wait` (a buy comes with stop, target and size in R).
+2. Only after a proposed `buy` are the risk manager (approve / abstain / **veto**) and the devil's advocate (approve /
+   abstain / object) asked, both at once.
+3. The trader (the usual day-long conversation) is shown the views, the count and the rule, and decides as always.
+4. A `buy` goes through only if the team backs it: the analyst proposed it, both other views arrived and are valid, no
+   veto, and a clear majority (the analyst is one yes; at least 2 yes and more yes than no). **A veto or a tie is `wait`**, so
+   is a missing, late or invalid view. Sells and closes are never blocked (exits are always allowed).
+
+The journal bar record gets a `team` key: every view (answer or why there is none, cost, tokens, seconds), the count, the
+trader's own answer, the final decision, `overridden` (why a buy became a wait) and the hash of the role files; `context`
+gets `team_cost_usd` and `bar_total_usd`. Without `--team` nothing changes. The roles are not Agent-tool subagents on
+purpose: such a subagent can only use tools its parent has, so it could not see the snapshot unless the trader were
+given a file-reading tool, and this version starts them in the background by default.
+
+**What it costs** (`uv run -m desk.team_cost`, report in `experiments/team-cost.md`, real `claude -p` on saved bars, no
+orders): a quiet bar costs about 10x the single trader's dollars and twice its time, a bar where the analyst proposes a
+buy about 19x and 4x. The roles re-read the whole snapshot every bar; the single trader sends a delta. Tests: `tests/test_team.py`.
+
 ## MCP server
 
 `desk/mcp_server/` is an MCP (Model Context Protocol) server for an interactive Claude Code session in this folder

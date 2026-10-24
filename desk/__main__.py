@@ -17,6 +17,7 @@ from .heartbeat import Heartbeat
 from .journal import Journal, State
 from .model import ClaudeModel
 from .scribe import Scribe
+from .team import TeamModel, Team
 from .snapshot import fetch_ib_daily
 
 CLIENT_ID = 8  # 1-7 are taken in the lab (see its AGENTS.md)
@@ -28,6 +29,8 @@ def main() -> None:
     parser.add_argument("--once", action="store_true", help="poll once, handle the new bars, exit")
     parser.add_argument("--dry-run", action="store_true", help="ask the model and gate, but send no orders")
     parser.add_argument("--model", default=None, help="Claude model for claude -p (default: the CLI's default)")
+    parser.add_argument("--team", action="store_true",
+                        help="ask the analyst, risk manager and devil's advocate (.claude/agents) before the trader decides")
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
@@ -37,7 +40,9 @@ def main() -> None:
         ib.qualifyContracts(contract)
         risk = Risk.from_file()
         broker = Broker(ib, f"live:desk:{SYMBOL}", dry_run=args.dry_run, risk=risk)
-        Heartbeat(ib=ib, contract=contract, feed=BarFeed(ib, contract), model=ClaudeModel(model=args.model),
+        trader = ClaudeModel(model=args.model)
+        model = TeamModel(trader, Team(model=args.model)) if args.team else trader
+        Heartbeat(ib=ib, contract=contract, feed=BarFeed(ib, contract), model=model,
                   executor=Executor(ib, broker, contract), broker=broker, risk=risk, journal=Journal(),
                   state=State.load(), symbol=SYMBOL, fetch_daily=lambda: fetch_ib_daily(ib, contract),
                   lab_journal=LabJournal(JOURNAL_PATH), limits_check=limits_pin.verify,

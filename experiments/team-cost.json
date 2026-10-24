@@ -1,0 +1,329 @@
+{
+ "single": {
+  "summary": {
+   "bars": 6,
+   "first_bar_usd": 0.1535,
+   "first_bar_s": 6.0,
+   "steady_bars": 5,
+   "usd_per_bar": 0.0154,
+   "trader_usd": 0.0154,
+   "team_usd": 0.0,
+   "s_per_bar": 4.422,
+   "max_s": 6.0,
+   "failures": 0
+  },
+  "rows": [
+   {
+    "mode": "single",
+    "bar": "20261023T1820Z",
+    "first": true,
+    "input": "full",
+    "wall_s": 6.0,
+    "trader_usd": 0.1535,
+    "team_usd": 0.0,
+    "team_tokens": 0,
+    "trader_tokens": 39638,
+    "roles": [],
+    "proposal": null,
+    "tally": null,
+    "action": "wait",
+    "failure": null,
+    "bar_usd": 0.1535
+   },
+   {
+    "mode": "single",
+    "bar": "20261023T1825Z",
+    "first": false,
+    "input": "delta",
+    "wall_s": 4.28,
+    "trader_usd": 0.0152,
+    "team_usd": 0.0,
+    "team_tokens": 0,
+    "trader_tokens": 41794,
+    "roles": [],
+    "proposal": null,
+    "tally": null,
+    "action": "wait",
+    "failure": null,
+    "bar_usd": 0.0152
+   },
+   {
+    "mode": "single",
+    "bar": "20261023T1830Z",
+    "first": false,
+    "input": "delta",
+    "wall_s": 4.7,
+    "trader_usd": 0.0155,
+    "team_usd": 0.0,
+    "team_tokens": 0,
+    "trader_tokens": 43799,
+    "roles": [],
+    "proposal": null,
+    "tally": null,
+    "action": "wait",
+    "failure": null,
+    "bar_usd": 0.0155
+   },
+   {
+    "mode": "single",
+    "bar": "20261023T1835Z",
+    "first": false,
+    "input": "delta",
+    "wall_s": 4.39,
+    "trader_usd": 0.0153,
+    "team_usd": 0.0,
+    "team_tokens": 0,
+    "trader_tokens": 45878,
+    "roles": [],
+    "proposal": null,
+    "tally": null,
+    "action": "wait",
+    "failure": null,
+    "bar_usd": 0.0153
+   },
+   {
+    "mode": "single",
+    "bar": "20261023T1840Z",
+    "first": false,
+    "input": "delta",
+    "wall_s": 4.7,
+    "trader_usd": 0.0158,
+    "team_usd": 0.0,
+    "team_tokens": 0,
+    "trader_tokens": 48033,
+    "roles": [],
+    "proposal": null,
+    "tally": null,
+    "action": "wait",
+    "failure": null,
+    "bar_usd": 0.0158
+   },
+   {
+    "mode": "single",
+    "bar": "20261023T1845Z",
+    "first": false,
+    "input": "delta",
+    "wall_s": 4.04,
+    "trader_usd": 0.0154,
+    "team_usd": 0.0,
+    "team_tokens": 0,
+    "trader_tokens": 50050,
+    "roles": [],
+    "proposal": null,
+    "tally": null,
+    "action": "wait",
+    "failure": null,
+    "bar_usd": 0.0154
+   }
+  ]
+ },
+ "team": {
+  "summary": {
+   "bars": 6,
+   "first_bar_usd": 0.2863,
+   "first_bar_s": 9.95,
+   "steady_bars": 5,
+   "usd_per_bar": 0.1483,
+   "trader_usd": 0.0164,
+   "team_usd": 0.1318,
+   "s_per_bar": 8.43,
+   "max_s": 9.95,
+   "failures": 0
+  },
+  "rows": [
+   {
+    "mode": "team",
+    "bar": "20261023T1820Z",
+    "first": true,
+    "input": "full",
+    "wall_s": 9.95,
+    "trader_usd": 0.1545,
+    "team_usd": 0.131807,
+    "team_tokens": 33703,
+    "trader_tokens": 39921,
+    "roles": [
+     "analyst"
+    ],
+    "proposal": "wait",
+    "tally": "the analyst proposed wait, not a buy",
+    "action": "wait",
+    "failure": null,
+    "bar_usd": 0.2863
+   },
+   {
+    "mode": "team",
+    "bar": "20261023T1825Z",
+    "first": false,
+    "input": "delta",
+    "wall_s": 8.81,
+    "trader_usd": 0.0164,
+    "team_usd": 0.131887,
+    "team_tokens": 33708,
+    "trader_tokens": 42355,
+    "roles": [
+     "analyst"
+    ],
+    "proposal": "wait",
+    "tally": "the analyst proposed wait, not a buy",
+    "action": "wait",
+    "failure": null,
+    "bar_usd": 0.1483
+   },
+   {
+    "mode": "team",
+    "bar": "20261023T1830Z",
+    "first": false,
+    "input": "delta",
+    "wall_s": 8.15,
+    "trader_usd": 0.0159,
+    "team_usd": 0.131821,
+    "team_tokens": 33696,
+    "trader_tokens": 44654,
+    "roles": [
+     "analyst"
+    ],
+    "proposal": "wait",
+    "tally": "the analyst proposed wait, not a buy",
+    "action": "wait",
+    "failure": null,
+    "bar_usd": 0.1477
+   },
+   {
+    "mode": "team",
+    "bar": "20261023T1835Z",
+    "first": false,
+    "input": "delta",
+    "wall_s": 8.17,
+    "trader_usd": 0.0162,
+    "team_usd": 0.131807,
+    "team_tokens": 33685,
+    "trader_tokens": 46940,
+    "roles": [
+     "analyst"
+    ],
+    "proposal": "wait",
+    "tally": "the analyst proposed wait, not a buy",
+    "action": "wait",
+    "failure": null,
+    "bar_usd": 0.148
+   },
+   {
+    "mode": "team",
+    "bar": "20261023T1840Z",
+    "first": false,
+    "input": "delta",
+    "wall_s": 8.7,
+    "trader_usd": 0.0169,
+    "team_usd": 0.131791,
+    "team_tokens": 33678,
+    "trader_tokens": 49389,
+    "roles": [
+     "analyst"
+    ],
+    "proposal": "wait",
+    "tally": "the analyst proposed wait, not a buy",
+    "action": "wait",
+    "failure": null,
+    "bar_usd": 0.1487
+   },
+   {
+    "mode": "team",
+    "bar": "20261023T1845Z",
+    "first": false,
+    "input": "delta",
+    "wall_s": 8.32,
+    "trader_usd": 0.0168,
+    "team_usd": 0.131843,
+    "team_tokens": 33691,
+    "trader_tokens": 51692,
+    "roles": [
+     "analyst"
+    ],
+    "proposal": "wait",
+    "tally": "the analyst proposed wait, not a buy",
+    "action": "wait",
+    "failure": null,
+    "bar_usd": 0.1486
+   }
+  ]
+ },
+ "stress": {
+  "summary": {
+   "bars": 3,
+   "first_bar_usd": 0.4454,
+   "first_bar_s": 20.8,
+   "steady_bars": 2,
+   "usd_per_bar": 0.2985,
+   "trader_usd": 0.0171,
+   "team_usd": 0.2813,
+   "s_per_bar": 16.98,
+   "max_s": 20.8,
+   "failures": 0
+  },
+  "rows": [
+   {
+    "mode": "stress",
+    "bar": "20261023T1820Z",
+    "first": true,
+    "input": "full",
+    "wall_s": 20.8,
+    "trader_usd": 0.1553,
+    "team_usd": 0.290109,
+    "team_tokens": 169111,
+    "trader_tokens": 40085,
+    "roles": [
+     "analyst",
+     "devils-advocate",
+     "risk-manager"
+    ],
+    "proposal": "buy",
+    "tally": "the risk manager vetoed",
+    "action": "wait",
+    "failure": null,
+    "bar_usd": 0.4454
+   },
+   {
+    "mode": "stress",
+    "bar": "20261023T1825Z",
+    "first": false,
+    "input": "delta",
+    "wall_s": 17.75,
+    "trader_usd": 0.0175,
+    "team_usd": 0.282408,
+    "team_tokens": 135186,
+    "trader_tokens": 42701,
+    "roles": [
+     "analyst",
+     "devils-advocate",
+     "risk-manager"
+    ],
+    "proposal": "buy",
+    "tally": "the risk manager vetoed",
+    "action": "wait",
+    "failure": null,
+    "bar_usd": 0.2999
+   },
+   {
+    "mode": "stress",
+    "bar": "20261023T1830Z",
+    "first": false,
+    "input": "delta",
+    "wall_s": 16.21,
+    "trader_usd": 0.0168,
+    "team_usd": 0.280288,
+    "team_tokens": 134931,
+    "trader_tokens": 45197,
+    "roles": [
+     "analyst",
+     "devils-advocate",
+     "risk-manager"
+    ],
+    "proposal": "buy",
+    "tally": "the risk manager vetoed",
+    "action": "wait",
+    "failure": null,
+    "bar_usd": 0.2971
+   }
+  ]
+ }
+}

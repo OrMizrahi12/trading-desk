@@ -23,6 +23,8 @@ class Session:
     `intro` is extra text for the first message of a new session (today's date, a summary of the day before).
     The model fills `instructions` (hash of the exact text it sent as system prompt), `context` (token counts) and
     `skills` (the desk skills claude loaded with its Skill tool on this bar, in order; None = not known, e.g. a timeout).
+    `full` is the bar's complete snapshot (the model may get only a delta; the team's roles keep no memory and need all of
+    it) and `team` the team's record for the bar (views, tally, cost), both only used by team.TeamModel.
     """
 
     id: str
@@ -31,6 +33,8 @@ class Session:
     instructions: str | None = None
     context: dict = field(default_factory=dict)
     skills: list[str] | None = None
+    full: dict | None = None
+    team: dict | None = None
 
 
 class ModelFailure(RuntimeError):

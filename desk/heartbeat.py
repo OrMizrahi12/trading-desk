@@ -124,6 +124,7 @@ class Heartbeat:
             record["snapshot_sha1"] = hashlib.sha1(text.encode()).hexdigest()[:12]
             record["snapshot_file"] = str(self.journal.write_snapshot(bar_start.strftime("%Y%m%dT%H%MZ"), snap))
             session = self._open_session(bar_start)
+            session.full = snap
             sent = snapshot.delta(snap, self.state.session_last_bar) if session.resume and self.state.session_last_bar else None
             sent = sent or snap  # a new session (or no usable previous bar) gets everything
             record["input"] = sent.get("snapshot_kind", "full")
@@ -243,6 +244,8 @@ class Heartbeat:
             record["session"]["intro"] = session.intro  # the extra text the trader saw first, beside CLAUDE.md
             record["session"]["intro_sha1"] = text_hash(session.intro)
         record["skills"] = session.skills  # skills claude loaded on this bar (from its Skill tool calls); None = unknown
+        if session.team:
+            record["team"] = session.team  # the team's views, the count and the final decision (desk/team.py)
         if session.context:
             record["context"] = session.context
             c = session.context
@@ -256,6 +259,9 @@ class Heartbeat:
                 if answered or session.resume:
                     st.session_cost_usd = cum
             bar_cost = c.get("bar_cost_usd")
+            if session.team:  # the roles are separate calls: their cost comes on top of the trader's
+                c["team_cost_usd"] = session.team.get("cost_usd")
+                c["bar_total_usd"] = None if bar_cost is None else round(bar_cost + (c["team_cost_usd"] or 0), 6)
             msg = "bar %s session %s #%s: context %d tokens (%s of window), +%d output, cost %s this bar, $%.4f this session"
             args = (record["bar"], session.id[:8], record["session"]["bar_no"], c["tokens"],
                     f"{share:.1%}" if share is not None else "window unknown", c["output_tokens"], f"${bar_cost:.4f}" if bar_cost is not None else "unknown", cum or 0)
