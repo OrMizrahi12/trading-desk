@@ -34,6 +34,9 @@ VAULT = Path(__file__).parent.parent / "vault"
 WRITABLE = ("Trades", "Daily", "Weekly")  # the only vault folders the writer may put files in
 SETUPS = {"Opening range breakout": "opening-range-breakout", "VWAP reclaim": "vwap-reclaim"}  # note name -> `setup:` slug
 AFTER_CLOSE = (16, 10)  # New York time: the daily and weekly notes are written from here on (the market closes at 16:00)
+CLOSE = (16, 0)  # New York time: the market closes (a half day closes earlier, see LAST_BAR_GRACE)
+LAST_BAR_GRACE = timedelta(hours=1)  # after the close plus this, today is written even if its last bar never reached the journal
+BAR = timedelta(minutes=5)
 BACKFILL_DAYS = 2  # a day missed by a restart is still filled in for this many days back
 ATTEMPTS = 2  # Claude calls per note and pass
 GIVE_UP_AFTER = 3  # failed passes, then the note is written with Python's own summary instead of Claude's text
@@ -194,7 +197,7 @@ class Scribe:
             for day in self._finished_days(ny):
                 if (today - date.fromisoformat(day)).days <= BACKFILL_DAYS:
                     written += self._job(f"day:{day}", lambda give_up, day=day: self.write_day(day, give_up))
-            if ny.weekday() == 4 and (ny.hour, ny.minute) >= AFTER_CLOSE and self.journal.bar_records():
+            if ny.weekday() == 4 and self._day_complete(str(today), ny) and self.journal.bar_records():
                 week = f"{today.isocalendar().year}-W{today.isocalendar().week:02d}"
                 if not (self.vault / "Weekly" / f"{week}.md").exists():
                     written += self._job(f"week:{week}", lambda give_up: self.write_week(today, give_up))
@@ -205,13 +208,25 @@ class Scribe:
         days = sorted({bar_day(r["bar"]) for r in self.journal.bar_records()})
         out = []
         for day in days:
-            if day == str(ny.date()) and (ny.hour, ny.minute) < AFTER_CLOSE:
+            if not self._day_complete(day, ny):
                 continue
             path = self.vault / "Daily" / f"{day}.md"
             body = section_body(path.read_text(), "How the day went") if path.exists() else None
             if body is None or not body.strip():
                 out.append(day)
         return out
+
+    def _day_complete(self, day: str, ny: pd.Timestamp) -> bool:
+        """Can the day's note be written? An earlier day always can. Today can once it is after the close AND the journal
+        holds the day's last bar: the delayed feed hands the 15:55 bar over about 15 minutes late, and a note written
+        before that counts the day one bar short. A half day or a lost last bar is waited out for LAST_BAR_GRACE."""
+        if day != str(ny.date()):
+            return True
+        if (ny.hour, ny.minute) < AFTER_CLOSE:
+            return False
+        close = ny.normalize().replace(hour=CLOSE[0], minute=CLOSE[1])
+        starts = [datetime.fromisoformat(r["bar"]) for r in self.journal.bar_records() if bar_day(r["bar"]) == day]
+        return not starts or max(starts) + BAR >= close or ny >= close + LAST_BAR_GRACE
 
     def _job(self, key: str, fn) -> list[Path]:
         fails, last = self._failed.get(key, (0, 0.0))

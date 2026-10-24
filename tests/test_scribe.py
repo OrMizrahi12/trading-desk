@@ -94,20 +94,28 @@ def trade_answer(facts):
                 "what_happened": f"The desk closed by hand at {facts['exit_price']}.", "good_trade": True,
                 "setup": "VWAP reclaim", "lesson": "nothing to change"}
     if facts["kind"] == "day":
-        return {"how_the_day_went": f"One trade, {facts['trades'][0]['result_r']}R."}
+        return {"how_the_day_went": f"One trade, {facts['trades'][0]['result_r']}R." if facts["trades"] else "A quiet day."}
     return {"summary": f"{facts['trades_closed']} trade this week."}
 
 
 @pytest.fixture
 def desk(tmp_path):
     vault = tmp_path / "vault"
-    shutil.copytree(REAL_VAULT, vault, ignore=shutil.ignore_patterns(".obsidian", "Daily", "Trades"))
+    shutil.copytree(REAL_VAULT, vault, ignore=shutil.ignore_patterns(".obsidian", "Daily", "Trades", "Weekly"))
     (vault / "Trades").mkdir()
     journal = Journal(tmp_path / "desk")
     journal.append({"bar": ENTRY_BAR, "decision": {"action": "buy", "reason": "x"}, "result": {"status": "bought"}})
     journal.append({"bar": EXIT_BAR, "decision": {"action": "close", "reason": "target nearly reached"}, "result": {"status": "sold"}})
     journal.append(trades.closed_record({**open_(), "exits": [leg()]}, protection_fills=[], now=EXIT_BAR))
+    journal.append(bar_wait(LAST_BAR))  # the day's last bar, 15:55 New York time
     return journal, vault
+
+
+LAST_BAR = "2026-10-23T19:55:00+00:00"
+
+
+def bar_wait(bar):
+    return {"bar": bar, "decision": {"action": "wait", "reason": "market closed"}}
 
 
 def after_close(day=FRIDAY):
@@ -224,3 +232,37 @@ def test_a_failing_claude_writes_nothing(desk):
                run=lambda cmd, **kw: subprocess.CompletedProcess(cmd, 1, "", "boom"))
     assert s.run_pending(pd.Timestamp(f"{FRIDAY} 11:20", tz="America/New_York")) == []
     assert not list((vault / "Trades").glob("*.md"))
+
+
+def test_today_waits_for_its_last_bar_before_the_daily_and_weekly_notes(tmp_path):
+    vault = tmp_path / "vault"
+    shutil.copytree(REAL_VAULT, vault, ignore=shutil.ignore_patterns(".obsidian", "Daily", "Trades", "Weekly"))
+    (vault / "Trades").mkdir()
+    journal = Journal(tmp_path / "desk")
+    for bar in ("2026-10-23T19:45:00+00:00", "2026-10-23T19:50:00+00:00"):  # up to the 15:50 bar: 15:55 is still on its way
+        journal.append(bar_wait(bar))
+    fake = FakeClaude(trade_answer)
+    s = Scribe(journal, vault=vault, run=fake, background=False)
+    assert s.run_pending(after_close()) == [] and not fake.commands  # 16:15, but the day is one bar short
+    assert not (vault / "Daily").exists() and not (vault / "Weekly").exists()
+    journal.append(bar_wait(LAST_BAR))  # the feed hands over the 15:55 bar
+    assert {p.parent.name for p in s.run_pending(after_close())} == {"Daily", "Weekly"}
+
+
+def test_a_day_whose_last_bar_never_arrives_is_written_after_the_grace_period(tmp_path):
+    vault = tmp_path / "vault"
+    shutil.copytree(REAL_VAULT, vault, ignore=shutil.ignore_patterns(".obsidian", "Daily", "Trades", "Weekly"))
+    journal = Journal(tmp_path / "desk")
+    journal.append(bar_wait("2026-10-23T19:50:00+00:00"))  # a half day, or a bar the desk missed
+    s = Scribe(journal, vault=vault, run=FakeClaude(trade_answer), background=False)
+    assert s.run_pending(pd.Timestamp(f"{FRIDAY} 16:59", tz="America/New_York")) == []
+    assert [p.parent.name for p in s.run_pending(pd.Timestamp(f"{FRIDAY} 17:00", tz="America/New_York"))] == ["Daily", "Weekly"]
+
+
+def test_an_earlier_day_is_written_whatever_its_last_bar(tmp_path):
+    vault = tmp_path / "vault"
+    shutil.copytree(REAL_VAULT, vault, ignore=shutil.ignore_patterns(".obsidian", "Daily", "Trades", "Weekly"))
+    journal = Journal(tmp_path / "desk")
+    journal.append(bar_wait("2026-10-23T15:00:00+00:00"))  # the desk was stopped at 11:00; the next morning it catches up
+    s = Scribe(journal, vault=vault, run=FakeClaude(trade_answer), background=False)
+    assert [p.parent.name for p in s.run_pending(pd.Timestamp("2026-10-24 08:00", tz="America/New_York"))] == ["Daily"]
