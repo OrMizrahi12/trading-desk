@@ -25,6 +25,7 @@ A few words used below:
 | `Lessons/` | One short note per lesson, a single sentence of "do this differently" with links to the trades that taught it. Only `status: active` ones reach the trader (see the memory budget below); retired ones live in `Lessons/Archive/`. | The desk's reviewer proposes one after each closed trade (`status: proposed`); the person decides what becomes a rule. |
 | `Reviews/` | `Review after 50 trades`, `... 100 trades`, ...: results split by setup, time of day and market regime, each number with its 95% interval. | The review module (`desk/review.py`), plain arithmetic, no Claude. Written once, never overwritten. |
 | `Changelog/` | The [[Rules change log]]: every promotion, archiving and rollback of a lesson, with the numbers behind it. | The lesson tracker (`desk/lessons.py`), nobody by hand. |
+| `Versions/` | [[Trader versions]]: what changed in the trader's instructions and why, version by version, checked against `experiments/ledger.csv`, git and the journal. | Claude, on request; it never edits the ledger. |
 | `Templates/` | [[Trade note]] and [[Daily note]]. Copy them, never fill them in place. | The person. |
 
 ## How a day flows
