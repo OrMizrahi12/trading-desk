@@ -103,6 +103,23 @@ async def test_bracket_refused_by_the_stop_file(mcp_rig):
     assert out.is_error and "STOP file" in out.content[0].text and orders(rig) == []
 
 
+async def test_bracket_refused_until_the_heartbeats_last_closed_trade_has_its_review(mcp_rig):
+    from desk import trades
+    from desk.journal import Journal
+    rig = mcp_rig()
+    journal = Journal(rig.desk.heartbeat_dir)
+    trade = {"ref": "r1", "entry_bar": "2026-10-21T16:00:00+00:00", "entry_seen_at": None, "entry_price": 600.0, "shares": 10,
+             "stop": 597.0, "target": 606.0, "size_r": 0.5, "entry_reason": "x", "exits": [
+                 {"shares": 10, "price": 603.0, "type": "close", "at": "2026-10-21T16:30:00+00:00"}]}
+    journal.append(trades.closed_record(trade, protection_fills=[], now="2026-10-21T16:30:00+00:00"))
+    async with rig.client() as c:
+        out = await c.call_tool("place_bracket", bracket(rig))
+        assert out.is_error and "post-trade review" in out.content[0].text and orders(rig) == []
+        journal.append({"trade_reviewed": {"key": "r1"}, "at": "2026-10-21T16:35:00+00:00"})
+        out = await c.call_tool("place_bracket", bracket(rig))
+    assert not out.is_error and orders(rig)
+
+
 async def test_bracket_refused_on_a_stale_bar_when_closed_and_near_the_close(mcp_rig):
     async def attempt(rig):
         async with rig.client() as c:

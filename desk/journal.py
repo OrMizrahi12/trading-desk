@@ -82,6 +82,33 @@ class Journal:
                 out.append({**r["trade_closed"], "noticed_at": r.get("at")})
         return out
 
+    def reviewed_keys(self) -> set[str]:
+        """Keys (see trades.trade_key) of the trades whose post-trade review is written: the `trade_reviewed` records."""
+        if not self.path.exists():
+            return set()
+        out = set()
+        for line in self.path.read_text().splitlines():
+            try:
+                r = json.loads(line)
+            except ValueError:
+                continue
+            if isinstance(r, dict) and isinstance(r.get("trade_reviewed"), dict) and r["trade_reviewed"].get("key"):
+                out.add(r["trade_reviewed"]["key"])
+        return out
+
+    def unreviewed_trades(self) -> list[dict]:
+        """Closed trades with no `trade_reviewed` record yet, oldest first."""
+        done = self.reviewed_keys()
+        return [t for t in self.closed_trades() if (t.get("ref") or t["entry_bar"]) not in done]
+
+    def pending_review(self) -> dict | None:
+        """The LAST closed trade when it has no review yet, else None. This is what holds back new entries."""
+        closed = self.closed_trades()
+        if not closed:
+            return None
+        last = closed[-1]
+        return None if (last.get("ref") or last["entry_bar"]) in self.reviewed_keys() else last
+
     def day_summary(self, day: str | None = None, before: str | None = None) -> str | None:
         """Plain facts about one New York trading day, from the bar records: `day`, or the latest day before `before`.
 

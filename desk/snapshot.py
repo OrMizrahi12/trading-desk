@@ -166,7 +166,8 @@ def todays_fills(ib) -> list[dict]:
 
 
 def build(*, closed: pd.DataFrame, bar_start: pd.Timestamp, ib, tag: str, symbol: str, now: pd.Timestamp,
-          daily_history: pd.DataFrame | None, journal_tail: list[dict], stop_file: bool, limits: dict) -> dict:
+          daily_history: pd.DataFrame | None, journal_tail: list[dict], stop_file: bool, limits: dict,
+          review_block: str | None = None) -> dict:
     """The snapshot for the bar starting at `bar_start`. Only bars closed by then are included (no look-ahead)."""
     five = closed[closed.index <= bar_start]
     daily, daily_source = merge_daily(daily_history, five)
@@ -184,6 +185,8 @@ def build(*, closed: pd.DataFrame, bar_start: pd.Timestamp, ib, tag: str, symbol
         "stop_file_present": stop_file,
         "risk_limits": limits,
         "recent_journal": journal_tail,
+        # post-trade review = a written look back at a finished trade; until the last closed trade has one, entries are refused
+        "entry_review_gate": {"entries_open": review_block is None, "why_closed": review_block},
     }
 
 
@@ -209,7 +212,7 @@ def delta(snap: dict, prev_bar_start: str) -> dict | None:
            # a 15-minute bar is new once it completed after the previous bar closed: start + 15 min > prev start + 5 min
            "new_bars_15min": after(snap["bars_15min"], prev.tz_convert(NY) - pd.Timedelta(minutes=10)),
            "today_daily_bar": snap["bars_daily"][-1:]}
-    for k in ("positions", "open_orders", "todays_fills", "account", "stop_file_present", "risk_limits"):
+    for k in ("positions", "open_orders", "todays_fills", "account", "stop_file_present", "risk_limits", "entry_review_gate"):
         out[k] = snap[k]
     out["recent_journal"] = [j for j in snap["recent_journal"] if j.get("bar") and pd.Timestamp(j["bar"]) >= prev]
     return out

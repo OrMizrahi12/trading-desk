@@ -10,6 +10,11 @@ R = the money lost if the stop is hit, so `result_r` = (exit - entry) / (entry -
 from .journal import bar_day
 
 
+def trade_key(trade: dict) -> str:
+    """What names a trade in the journal: its entry ref, else the start of its entry bar (the same key the vault writer uses)."""
+    return trade.get("ref") or trade["entry_bar"]
+
+
 def open_trade(record: dict, result: dict, decision: dict) -> dict:
     """The state kept while the long is open, made from the bar record of the buy."""
     return {"ref": result.get("ref"), "entry_bar": record["bar"], "entry_seen_at": record.get("seen_at"),

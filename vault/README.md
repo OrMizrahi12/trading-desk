@@ -22,7 +22,7 @@ A few words used below:
 | `Trades/` | One note per trade, from the [[Trade note]] template: `YYYY-MM-DD HHMM SPY`. Written after the trade ends, as part of the review. | Claude. |
 | `Daily/` | One note per trading day, `YYYY-MM-DD`, from the [[Daily note]] template: plan, how the day went, counters. | Claude. |
 | `Weekly/` | One summary per week, `YYYY-Www` (e.g. `2026-W43`), written on Friday after the close: counters and a link to every trade note and daily note of the week. | The desk's note writer (see below). |
-| `Lessons/` | One short note per lesson, a single sentence of "do this differently" with links to the trades that taught it. Only `status: active` ones reach the trader (see the memory budget below); retired ones live in `Lessons/Archive/`. | Claude proposes; the person decides what becomes a rule. |
+| `Lessons/` | One short note per lesson, a single sentence of "do this differently" with links to the trades that taught it. Only `status: active` ones reach the trader (see the memory budget below); retired ones live in `Lessons/Archive/`. | The desk's reviewer proposes one after each closed trade (`status: proposed`); the person decides what becomes a rule. |
 | `Templates/` | [[Trade note]] and [[Daily note]]. Copy them, never fill them in place. | The person. |
 
 ## How a day flows
@@ -35,10 +35,20 @@ A few words used below:
 ## Notes the desk writes by itself
 The heartbeat (`uv run -m desk`) fills `Trades/`, `Daily/` and `Weekly/` without anyone asking. It is a separate `claude -p`
 call, not the trader, and it has no tools: it only returns sentences. The desk's code (`desk/scribe.py`) writes the files,
-only inside those three folders. Every number (prices, shares, result in R, counters) is computed by the code from the
+only inside those folders (`Trades/`, `Daily/`, `Weekly/` and the top level of `Lessons/`). Every number (prices, shares, result in R, counters) is computed by the code from the
 journal and put in the note by the code; a sentence containing a number that is not in the journal facts is rejected.
 - **When a trade ends** (the journal gets a `trade_closed` line): its note in `Trades/` from the [[Trade note]] template,
   linking the setup and the day, and the day's note lists it and updates its counters.
+- **Right after that, the post-trade review** (a written look back at the finished trade). A second `claude -p` call is woken
+  with the trade and the 5-minute bars since its entry and must load the trader's `post-trade-review` skill (the only tool
+  it has; the call is rejected and repeated if the skill was not loaded). The code then writes the review into the trade note's
+  `## Review` section, adds `reviewed:` to its front matter and writes **one tagged lesson** into `Lessons/`
+  (`tags: [lesson, <what it is about>, <setup>]`, `status: proposed`, `seen: 1`; a lesson with the same title gets one more `seen`
+  and a link instead of a copy; "nothing to change" writes no lesson). Only then is `trade_reviewed` journaled.
+  **That record is a gate:** until the last closed trade has it, the desk refuses every new entry (selling is still allowed),
+  and tells the trader why in the refused bar's verdict and in the snapshot's `entry_review_gate`. If Claude cannot produce a
+  review it is retried every 2 minutes and the gate stays shut; Python never writes a review in Claude's place.
+  A `proposed` lesson does not load on any bar, so it costs nothing of the memory budget until a person makes it `active`.
 - **After 16:10 New York time**: "How the day went" in that day's note. A plan or lesson already written by hand is kept.
 - **Friday after the close**: the week's summary in `Weekly/`, linking every trade note and daily note of the week.
 - If a stop or target filled and the broker did not report the price, the exit price and result stay empty. Edit by hand.

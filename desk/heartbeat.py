@@ -118,7 +118,8 @@ class Heartbeat:
             snap = snapshot.build(
                 closed=closed, bar_start=bar_start, ib=self.ib, tag=self.tag, symbol=self.symbol, now=now,
                 daily_history=self._daily_history(now), journal_tail=self.journal.tail(10),
-                stop_file=gates.stop_file_present(self.risk.root), limits=dataclasses.asdict(self.risk.limits))
+                stop_file=gates.stop_file_present(self.risk.root), limits=dataclasses.asdict(self.risk.limits),
+                review_block=execute.review_block(self.journal))
             text = json.dumps(snap, sort_keys=True, default=str)
             record["snapshot_sha1"] = hashlib.sha1(text.encode()).hexdigest()[:12]
             record["snapshot_file"] = str(self.journal.write_snapshot(bar_start.strftime("%Y%m%dT%H%MZ"), snap))
@@ -282,17 +283,27 @@ class Heartbeat:
         except Exception:
             net_liq = None
         pos = execute.position_from_ib(self.ib, self.tag, self.symbol)
+        if decision.action == "buy":  # a finished trade must be reviewed before the next entry (sells and closes never wait)
+            why = execute.review_block(self.journal)
+            if why is None and pos is None and self.state.open_trade:  # the stop or target just filled: its end is not journaled yet
+                why = ("no new entry yet: the previous trade has just ended and is not journaled yet, so its post-trade "
+                       "review cannot start. Entries reopen once the review is written; selling is still allowed.")
+        else:
+            why = None
         resting_buys = sum(1 for t in self.ib.openTrades() if t.order.action == "BUY"
                            and t.contract.symbol == self.symbol and not t.isDone())
         return gates.gate(decision, ref_price=ref_price, held=pos.shares if pos else 0, resting_buys=resting_buys,
                           session=snap["session"], net_liq=net_liq, position_stop=pos.stop if pos else None,
                           risk=self.risk, ib=self.ib, symbol=self.symbol,
-                          stop_file=gates.stop_file_present(self.risk.root))
+                          stop_file=gates.stop_file_present(self.risk.root), review_block=why)
 
     def _execute(self, decision: Decision, verdict: gates.Verdict, bar_start: pd.Timestamp, ref_price: float) -> dict:
         try:
             return execute.run(decision, verdict.shares, executor=self.executor, ib=self.ib, tag=self.tag,
-                               symbol=self.symbol, bar_ts=bar_start, ref_price=ref_price, state=self.state)
+                               symbol=self.symbol, bar_ts=bar_start, ref_price=ref_price, state=self.state,
+                               journal=self.journal)
+        except execute.ReviewPending as exc:  # the gate already checked; this is the executor's own last look
+            return {"status": "refused_pending_review", "reason": str(exc)}
         except RiskRefused as exc:
             return {"status": "refused_by_risk_limits", "reason": exc.reason}
         except DuplicateEntry as exc:

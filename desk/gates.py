@@ -45,8 +45,9 @@ def stop_file_present(root=None) -> bool:
 
 
 def gate(decision: Decision, *, ref_price: float, held: int, resting_buys: int, session: dict, net_liq: float | None,
-         position_stop: float | None, risk, ib, symbol: str, stop_file: bool) -> Verdict:
-    """Allow or refuse `decision`. `held` = shares long now; `session` = the snapshot's session block."""
+         position_stop: float | None, risk, ib, symbol: str, stop_file: bool, review_block: str | None = None) -> Verdict:
+    """Allow or refuse `decision`. `held` = shares long now; `session` = the snapshot's session block.
+    `review_block` = why the last closed trade's post-trade review still holds back new entries (see execute.review_block)."""
     action = decision.action
     if action == "wait":
         return Verdict(True, "wait")
@@ -74,6 +75,8 @@ def gate(decision: Decision, *, ref_price: float, held: int, resting_buys: int, 
     if session["minutes_to_close"] <= FLATTEN_BEFORE_CLOSE_MIN:
         return Verdict(False, f"within {FLATTEN_BEFORE_CLOSE_MIN} min of the close: no new entries",
                        seatbelt="entry_window")
+    if review_block:
+        return Verdict(False, review_block, seatbelt="post_trade_review")
     if held > 0 or resting_buys > 0:
         return Verdict(False, "already long or a buy is resting: no adding to a position")
     try:

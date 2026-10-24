@@ -11,6 +11,7 @@ The desk keeps no position book of its own: what we hold and which stop/target r
 
 import logging
 from dataclasses import replace
+from datetime import datetime
 
 from . import lab  # noqa: F401
 from live.execution import ExecutionHalt
@@ -19,11 +20,31 @@ from live.refs import entry_ref, owns
 from live.state import PositionState
 
 from .decision import Decision
+from .journal import NY, Journal
 
 log = logging.getLogger("desk")
 
 
 MCP_TAG_PREFIX = "live:mcp:"  # orderRef prefix of the MCP server's orders (desk/mcp_server), e.g. live:mcp:SPY
+
+
+class ReviewPending(RuntimeError):
+    """A new entry was refused: the last closed trade has no post-trade review yet. The message says why, for the trader."""
+
+
+def review_block(journal: Journal) -> str | None:
+    """Why no new entry may be made now, or None. Post-trade review = a written look back at a finished trade (what
+    happened, whether the decision was sound, one lesson); the desk's note writer makes it after every closed trade, and
+    until it is in the journal the desk takes no new entry. Exits are never held back."""
+    t = journal.pending_review()
+    if t is None:
+        return None
+    start = datetime.fromisoformat(t["entry_bar"]).astimezone(NY)
+    ended = t.get("exit_type") or "exit not recorded"
+    result = f", result {t['result_r']}R" if t.get("result_r") is not None else ""
+    return (f"no new entry until the last closed trade has its post-trade review: the {start:%H:%M} New York trade of "
+            f"{t['day']} ended ({ended}{result}) and the desk's note writer has not yet written its review. Entries "
+            f"reopen on their own once it is written; selling is still allowed.")
 
 
 def mcp_orders(ib, symbol: str) -> list:
@@ -72,9 +93,14 @@ def reduce_position(executor, ib, tag, symbol, shares: int, ref_price: float) ->
     return {"status": "sold", "shares": fill.shares, "price": round(fill.price, 4)}
 
 
-def run(decision: Decision, shares: int, *, executor, ib, tag: str, symbol: str, bar_ts, ref_price: float, state) -> dict:
-    """Execute a buy / sell / close. Raises ExecutionHalt, OrderRejected, RiskRefused, DuplicateEntry for the caller."""
+def run(decision: Decision, shares: int, *, executor, ib, tag: str, symbol: str, bar_ts, ref_price: float, state,
+        journal: Journal | None = None) -> dict:
+    """Execute a buy / sell / close. Raises ReviewPending, ExecutionHalt, OrderRejected, RiskRefused, DuplicateEntry for
+    the caller. `journal` is the desk's journal: a buy is refused while its last closed trade has no review (None = not
+    checked, for callers that keep no trade journal)."""
     if decision.action == "buy":
+        if journal is not None and (why := review_block(journal)):
+            raise ReviewPending(why)
         ref = entry_ref(tag, bar_ts)
 
         def write_ahead():  # remember the ref on disk before anything is sent, so a restart never sends it twice

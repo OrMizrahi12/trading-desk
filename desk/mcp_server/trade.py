@@ -27,6 +27,7 @@ from live.risk import RiskRefused, net_liquidation
 
 from .. import execute, gates, limits_pin, seatbelts, snapshot
 from ..decision import Decision, InvalidDecision, parse
+from ..journal import Journal
 from .core import DELAY_NOTE, MCP_TAG, SYMBOL, Desk, Refused, owner_of
 
 log = logging.getLogger("desk.mcp")
@@ -131,14 +132,18 @@ def place_bracket(ib, desk: Desk, *, size_r: float, stop: float, target: float |
         raise Refused("already long, or an entry of ours is resting: the desk never adds to a position")
     mkt = desk.market(ib)
     parts = desk.parts(ib)
+    heartbeat = Journal(desk.heartbeat_dir)  # the heartbeat's trades are reviewed there; the rule holds for every way to buy
     resting_buys = sum(1 for t in ib.openTrades() if t.order.action == "BUY" and t.contract.symbol == SYMBOL and not t.isDone())
     verdict = gates.gate(decision, ref_price=mkt.ref_price, held=own.shares, resting_buys=resting_buys, session=mkt.session,
                          net_liq=_net_liq(ib), position_stop=None, risk=desk.risk, ib=ib, symbol=SYMBOL,
-                         stop_file=gates.stop_file_present(desk.risk.root))
+                         stop_file=gates.stop_file_present(desk.risk.root), review_block=execute.review_block(heartbeat))
     if not verdict.allowed:
         raise Refused(verdict.reason + (f" [seatbelt: {verdict.seatbelt}]" if verdict.seatbelt else ""))
-    result = execute.run(decision, verdict.shares, executor=parts.executor, ib=ib, tag=MCP_TAG, symbol=SYMBOL,
-                         bar_ts=mkt.bar_start, ref_price=mkt.ref_price, state=desk.state)
+    try:
+        result = execute.run(decision, verdict.shares, executor=parts.executor, ib=ib, tag=MCP_TAG, symbol=SYMBOL,
+                             bar_ts=mkt.bar_start, ref_price=mkt.ref_price, state=desk.state, journal=heartbeat)
+    except execute.ReviewPending as exc:
+        raise Refused(str(exc)) from exc
     out = {**result, "stop": decision.stop, "target": decision.target, "size_r": decision.size_r,
            "ref_price": mkt.ref_price, "ref_bar_start": mkt.bar_start.tz_convert(snapshot.NY).isoformat(),
            "ref_bar_age_minutes": mkt.session["bar_age_minutes"], "terms": TERMS, "warnings": [DELAY_NOTE]}
