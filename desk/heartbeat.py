@@ -274,6 +274,8 @@ class Heartbeat:
         record["skills"] = session.skills  # skills claude loaded on this bar (from its Skill tool calls); None = unknown
         if session.team:
             record["team"] = session.team  # the team's views, the count and the final decision (desk/team.py)
+        if session.orb:
+            record["orb_veto"] = session.orb  # the ORB signal and what Claude said about it (desk/orb_veto.py)
         if session.context:
             record["context"] = session.context
             c = session.context

@@ -35,6 +35,7 @@ class Session:
     skills: list[str] | None = None
     full: dict | None = None
     team: dict | None = None
+    orb: dict | None = None  # the ORB veto's record for the bar (signal, Claude's verdict), only used by orb_veto.OrbVetoModel
 
 
 class ModelFailure(RuntimeError):

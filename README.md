@@ -206,3 +206,14 @@ gates and seatbelts are unchanged. Skipped bars are journaled as a desk `wait` (
 next call's delta carries every skipped bar. The 5 ATR threshold is the lab's pre-registered H1 number (see `desk/regime.py`
 for why it is not from module 7); it is not tuned. `uv run -m desk.regime_replay [--trace]` shows what the saved snapshots
 would have saved. Note: CLAUDE.md still says "never skips a bar"; it describes the default, and the switch changes that.
+
+## ORB veto (`--orb-veto`, off by default)
+
+The opposite design: the lab's `opening_range_breakout` strategy (default settings, unchanged) proposes every trade, and
+Claude may only **veto** one, with a reason. The opening range is the high and low of the first 5 minutes after the 09:30
+open; the strategy buys when a 5-minute bar closes above that high, with the stop (a resting sell order at the loss limit) at
+the range low and no target, one signal a day (a vetoed signal is not offered again). The desk fixes the size at 0.5 R and
+Claude cannot change size, stop or target. Claude is asked only when there is a signal and nothing is held; a veto, a late,
+invalid or missing answer is a `wait`. Held positions are managed by the stop and the pre-close flatten, not by Claude. All
+desk gates still apply after an approval. Cannot be combined with `--team` or `--regime-gate`. Journal: `orb_veto` (signal,
+Claude's verdict, cost). Replay: `uv run -m desk.orb_replay [--ask]` (`--ask` makes real Claude calls). Tests: `tests/test_orb_veto.py`.

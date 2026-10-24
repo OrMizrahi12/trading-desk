@@ -17,6 +17,7 @@ from .heartbeat import Heartbeat
 from .journal import Journal, State
 from .model import ClaudeModel
 from .scribe import Scribe
+from .orb_veto import OrbVetoModel, Vetoer
 from .team import TeamModel, Team
 from .snapshot import fetch_ib_daily
 
@@ -34,7 +35,12 @@ def main() -> None:
     parser.add_argument("--regime-gate", action="store_true",
                         help="wake the model only on trending bars (plus every safety case: a held long, open orders, a fill, "
                              "the exit window); see desk/regime.py. Default: every bar reaches the model")
+    parser.add_argument("--orb-veto", action="store_true",
+                        help="the lab's opening_range_breakout proposes every trade; Claude may only veto one, with a reason "
+                             "(desk/orb_veto.py). Cannot be combined with --team or --regime-gate")
     args = parser.parse_args()
+    if args.orb_veto and (args.team or args.regime_gate):
+        parser.error("--orb-veto replaces the trader, so it cannot be combined with --team or --regime-gate")
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
     ib = connect_paper(IB, client_id=CLIENT_ID)  # refuses non-paper port, host or account
@@ -45,6 +51,8 @@ def main() -> None:
         broker = Broker(ib, f"live:desk:{SYMBOL}", dry_run=args.dry_run, risk=risk)
         trader = ClaudeModel(model=args.model)
         model = TeamModel(trader, Team(model=args.model)) if args.team else trader
+        if args.orb_veto:
+            model = OrbVetoModel(Vetoer(model=args.model))
         Heartbeat(ib=ib, contract=contract, feed=BarFeed(ib, contract), model=model,
                   executor=Executor(ib, broker, contract), broker=broker, risk=risk, journal=Journal(),
                   state=State.load(), symbol=SYMBOL, fetch_daily=lambda: fetch_ib_daily(ib, contract),
