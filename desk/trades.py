@@ -15,12 +15,24 @@ def trade_key(trade: dict) -> str:
     return trade.get("ref") or trade["entry_bar"]
 
 
-def open_trade(record: dict, result: dict, decision: dict) -> dict:
+def regime(snapshot: dict) -> str:
+    """The market regime at entry, computed by the desk from the snapshot, never from the model's opinion: the trend of the
+    15-minute bars. `up` = the last close is above its 21-bar EMA (a smoothed average of recent closes) and the 9-bar EMA is
+    above the 21-bar one; `down` = both below; otherwise `mixed`. `not recorded` when the indicators are missing."""
+    rows = snapshot.get("bars_15min") or []
+    last = rows[-1] if rows else {}
+    close, fast, slow = last.get("close"), last.get("ema9"), last.get("ema21")
+    if None in (close, fast, slow):
+        return "not recorded"
+    return "up" if close > slow and fast > slow else "down" if close < slow and fast < slow else "mixed"
+
+
+def open_trade(record: dict, result: dict, decision: dict, regime: str | None = None) -> dict:
     """The state kept while the long is open, made from the bar record of the buy."""
     return {"ref": result.get("ref"), "entry_bar": record["bar"], "entry_seen_at": record.get("seen_at"),
             "entry_price": result.get("price"), "shares": result.get("shares"), "stop": decision.get("stop"),
             "target": decision.get("target"), "size_r": decision.get("size_r"), "entry_reason": decision.get("reason"),
-            "lessons": list(decision.get("lessons") or []), "exits": []}
+            "lessons": list(decision.get("lessons") or []), "regime": regime, "exits": []}
 
 
 def add_exit(trade: dict, *, shares, price, kind: str, at: str, lessons=()) -> None:

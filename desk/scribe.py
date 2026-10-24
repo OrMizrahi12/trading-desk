@@ -282,6 +282,11 @@ class Scribe:
                 week = f"{today.isocalendar().year}-W{today.isocalendar().week:02d}"
                 if not (self.vault / "Weekly" / f"{week}.md").exists():
                     written += self._job(f"week:{week}", lambda give_up: self.write_week(today, give_up))
+            from . import review  # here, not at the top: review -> lessons -> scribe
+            try:  # the 50-trade review is plain arithmetic, no Claude call; it waits for the block's trade notes
+                written += review.write_due(self.journal, self.vault)
+            except Exception:
+                log.exception("could not write the 50-trade review")
             return written
 
     def _finished_days(self, ny: pd.Timestamp) -> list[str]:

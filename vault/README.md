@@ -23,6 +23,7 @@ A few words used below:
 | `Daily/` | One note per trading day, `YYYY-MM-DD`, from the [[Daily note]] template: plan, how the day went, counters. | Claude. |
 | `Weekly/` | One summary per week, `YYYY-Www` (e.g. `2026-W43`), written on Friday after the close: counters and a link to every trade note and daily note of the week. | The desk's note writer (see below). |
 | `Lessons/` | One short note per lesson, a single sentence of "do this differently" with links to the trades that taught it. Only `status: active` ones reach the trader (see the memory budget below); retired ones live in `Lessons/Archive/`. | The desk's reviewer proposes one after each closed trade (`status: proposed`); the person decides what becomes a rule. |
+| `Reviews/` | `Review after 50 trades`, `... 100 trades`, ...: results split by setup, time of day and market regime, each number with its 95% interval. | The review module (`desk/review.py`), plain arithmetic, no Claude. Written once, never overwritten. |
 | `Changelog/` | The [[Rules change log]]: every promotion, archiving and rollback of a lesson, with the numbers behind it. | The lesson tracker (`desk/lessons.py`), nobody by hand. |
 | `Templates/` | [[Trade note]] and [[Daily note]]. Copy them, never fill them in place. | The person. |
 
@@ -135,6 +136,15 @@ claims without having used them spoil the comparison; with many lessons tested, 
 numbers in the log and not only the verdict. Nothing here loosens `CLAUDE.md` or the lab's limits.
 `uv run -m desk.lesson_demo` rebuilds a **seeded demo** (`experiments/lesson-demo-SEEDED/`, made-up trades) showing one
 promotion and one rollback; the tracker refuses to apply seeded trades to this vault.
+
+## The 50-trade review
+After every 50th closed trade the note writer also saves `Reviews/Review after N trades.md` (it waits until every trade of the
+block has its trade note, because the setup is read from there). `uv run -m desk.review` prints a due review, `--write` saves
+it, `--commit` also commits it. The block is always the first N trades, so a re-run gives the same note. For each group (setup;
+time of day: before 11:00, 11:00 to 13:00, from 13:00; market regime = the 15-minute trend at entry, worked out by the desk's
+code when the buy happens) it shows trades, win rate with its 95% range, average R with its 95% interval, and the difference
+from all other trades with its interval. A group under 10 trades is "too few to say"; the note also says how many groups chance
+alone would flag. The review changes nothing by itself: it is a question for the next 50 trades, not a new rule.
 
 ## Conventions
 - Link with `[[Note name]]`. Every trade links its setup; every lesson links its trades; every daily note links its trades.

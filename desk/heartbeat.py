@@ -143,7 +143,7 @@ class Heartbeat:
                 res = record["result"]
                 if res.get("status") == "bought":
                     self.state.entry_day = str(now.tz_convert(snapshot.NY).date())
-                    self.state.open_trade = trades.open_trade(record, res, dataclasses.asdict(decision))
+                    self.state.open_trade = trades.open_trade(record, res, dataclasses.asdict(decision), trades.regime(snap))
                 elif res.get("status") == "sold" and self.state.open_trade:
                     trades.add_exit(self.state.open_trade, shares=res.get("shares"), price=res.get("price"),
                                     kind=decision.action, at=now.isoformat(), lessons=decision.lessons)

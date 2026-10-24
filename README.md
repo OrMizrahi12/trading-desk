@@ -164,3 +164,9 @@ applied it with similar trades that did not (count, average R, 95% interval), pr
 20 applications with a clearly better average R, archives it when the evidence turns against it, and writes every change to
 `vault/Changelog/Rules change log.md` and to Git (`--apply`, `--commit`). `uv run -m desk.lesson_demo` shows one promotion and
 one rollback on **seeded, made-up** data in `experiments/lesson-demo-SEEDED/`. Details: `vault/README.md`, "Lesson tracking".
+
+## 50-trade review
+
+Every 50 closed trades `vault/Reviews/Review after N trades.md` is written (by code, no model): results split by setup, time of
+day and market regime (15-minute trend at entry), each with its 95% interval, small groups marked "too few to say". Manually:
+`uv run -m desk.review [--write|--commit]`. The seeded demo contains one such review, labelled as made-up.
