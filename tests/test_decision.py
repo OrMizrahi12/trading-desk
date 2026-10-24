@@ -6,7 +6,7 @@ from desk.decision import MAX_SIZE_R, InvalidDecision, check_prices, parse
 
 
 def ok(**kw):
-    base = {"action": "buy", "size_r": 1.0, "stop": 99.0, "target": 105.0, "reason": "because"}
+    base = {"action": "buy", "size_r": 1.0, "stop": 99.0, "target": 105.0, "reason": "because", "lessons": []}
     return {**base, **kw}
 
 

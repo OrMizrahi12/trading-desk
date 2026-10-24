@@ -156,3 +156,11 @@ the limits" is **not achievable inside this repo**. What the layers really give:
 - **To close it for real** (outside this repo, a person's call): own the lab's `live/` folder by root (or move the limits file
   into a root-owned folder), or run the desk as a different OS user than the one that runs Claude Code, or use a filesystem
   that supports `chattr +i`.
+
+## Lesson tracking
+
+The trader lists the lessons it used in each answer (`lessons`). `uv run -m desk.lessons` compares, per lesson, trades that
+applied it with similar trades that did not (count, average R, 95% interval), promotes a lesson into the playbook only after
+20 applications with a clearly better average R, archives it when the evidence turns against it, and writes every change to
+`vault/Changelog/Rules change log.md` and to Git (`--apply`, `--commit`). `uv run -m desk.lesson_demo` shows one promotion and
+one rollback on **seeded, made-up** data in `experiments/lesson-demo-SEEDED/`. Details: `vault/README.md`, "Lesson tracking".

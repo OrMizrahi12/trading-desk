@@ -146,7 +146,7 @@ class Heartbeat:
                     self.state.open_trade = trades.open_trade(record, res, dataclasses.asdict(decision))
                 elif res.get("status") == "sold" and self.state.open_trade:
                     trades.add_exit(self.state.open_trade, shares=res.get("shares"), price=res.get("price"),
-                                    kind=decision.action, at=now.isoformat())
+                                    kind=decision.action, at=now.isoformat(), lessons=decision.lessons)
                 if record["result"].get("status") == "refused_by_risk_limits":
                     belts.append({"name": "risk_limits", "detail": record["result"]["reason"]})
         except PaperGuardError as exc:

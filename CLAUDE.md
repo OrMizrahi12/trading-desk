@@ -44,6 +44,9 @@ Answer only with one JSON object in the required schema, with exactly these keys
 - `stop`: for `buy`, a price above 0 and below the last close; otherwise `null`.
 - `target`: for `buy`, a price above the last close, or `null` for none; otherwise `null`.
 - `reason`: short, non-empty, under 280 characters, explaining any term you use.
+- `lessons`: a list of the titles of the lessons in the memory brief that really shaped this decision, copied exactly as
+  written there; `[]` when none did. Name a lesson only if it changed or confirmed what you chose, never to look careful:
+  the desk later compares trades that used a lesson with similar trades that did not, and a false claim spoils that test.
 Anything invalid or missing is thrown away and the bar becomes `wait`; the desk never repairs an answer.
 `buy` opens a long (no adding). `sell` sells part of a long, sized in R. `close` sells the whole position.
 

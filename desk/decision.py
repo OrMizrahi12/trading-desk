@@ -20,11 +20,13 @@ from dataclasses import dataclass
 ACTIONS = ("buy", "sell", "close", "wait")
 MAX_SIZE_R = 2.0
 MAX_REASON = 280
+MAX_LESSONS = 5  # lessons one decision may name
+MAX_LESSON_NAME = 80  # characters of a lesson's title
 
 SCHEMA = {
     "type": "object",
     "additionalProperties": False,
-    "required": ["action", "size_r", "stop", "target", "reason"],
+    "required": ["action", "size_r", "stop", "target", "reason", "lessons"],
     "properties": {
         "action": {"type": "string", "enum": list(ACTIONS)},
         "size_r": {"type": "number", "minimum": 0, "maximum": MAX_SIZE_R,
@@ -32,6 +34,10 @@ SCHEMA = {
         "stop": {"type": ["number", "null"], "description": "stop price, below the entry; required for buy"},
         "target": {"type": ["number", "null"], "description": "profit target price, above the entry; null for none"},
         "reason": {"type": "string", "maxLength": MAX_REASON, "description": "short reason"},
+        "lessons": {"type": "array", "maxItems": MAX_LESSONS, "uniqueItems": True,
+                    "items": {"type": "string", "maxLength": MAX_LESSON_NAME},
+                    "description": "titles of the memory-brief lessons that really shaped this decision, exactly as "
+                                   "written in the brief; [] when none"},
     },
 }
 
@@ -47,6 +53,7 @@ class Decision:
     stop: float | None
     target: float | None
     reason: str
+    lessons: tuple[str, ...] = ()  # titles of the lessons applied, for the lesson tracker (desk/lessons.py)
 
 
 def _number(value, name: str, *, allow_none: bool = False) -> float | None:
@@ -55,6 +62,18 @@ def _number(value, name: str, *, allow_none: bool = False) -> float | None:
     if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
         raise InvalidDecision(f"{name} must be a finite number, got {value!r}")
     return float(value)
+
+
+def _lessons(value) -> tuple[str, ...]:
+    if not isinstance(value, list) or len(value) > MAX_LESSONS:
+        raise InvalidDecision(f"lessons must be a list of at most {MAX_LESSONS} titles")
+    names = []
+    for name in value:
+        if not isinstance(name, str) or not name.strip() or len(name) > MAX_LESSON_NAME:
+            raise InvalidDecision(f"a lesson title must be a non-empty string of at most {MAX_LESSON_NAME} characters")
+        if name.strip() not in names:
+            names.append(name.strip())
+    return tuple(names)
 
 
 def parse(raw) -> Decision:
@@ -84,7 +103,7 @@ def parse(raw) -> Decision:
             raise InvalidDecision("buy needs a positive stop")
         if target is not None and target <= 0:
             raise InvalidDecision("target must be positive or null")
-    return Decision(action, size_r, stop, target, reason.strip())
+    return Decision(action, size_r, stop, target, reason.strip(), _lessons(raw["lessons"]))
 
 
 def check_prices(decision: Decision, ref_price: float) -> None:

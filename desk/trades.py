@@ -20,12 +20,14 @@ def open_trade(record: dict, result: dict, decision: dict) -> dict:
     return {"ref": result.get("ref"), "entry_bar": record["bar"], "entry_seen_at": record.get("seen_at"),
             "entry_price": result.get("price"), "shares": result.get("shares"), "stop": decision.get("stop"),
             "target": decision.get("target"), "size_r": decision.get("size_r"), "entry_reason": decision.get("reason"),
-            "exits": []}
+            "lessons": list(decision.get("lessons") or []), "exits": []}
 
 
-def add_exit(trade: dict, *, shares, price, kind: str, at: str) -> None:
-    """Note a sale the desk itself made (`close`, `sell`, or the `seatbelt` that flattens before the close)."""
+def add_exit(trade: dict, *, shares, price, kind: str, at: str, lessons=()) -> None:
+    """Note a sale the desk itself made (`close`, `sell`, or the `seatbelt` that flattens before the close), and any
+    lesson the trader named when it decided to sell: a trade's lessons are all those named from its buy to its end."""
     trade["exits"].append({"shares": shares, "price": price, "type": kind, "at": at})
+    trade["lessons"] = list(dict.fromkeys([*(trade.get("lessons") or []), *lessons]))
 
 
 def result_r(entry, exit_, stop) -> float | None:

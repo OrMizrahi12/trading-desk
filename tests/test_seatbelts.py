@@ -210,7 +210,7 @@ def mcp_bracket(r, shares=5):
 
 
 def test_heartbeat_refuses_every_decision_while_the_mcp_server_holds_spy(rig):
-    for answer in (buy(), CLOSE, {"action": "sell", "size_r": 0.3, "stop": None, "target": None, "reason": "trim"}):
+    for answer in (buy(), CLOSE, {"action": "sell", "size_r": 0.3, "stop": None, "target": None, "reason": "trim", "lessons": []}):
         r = rig(answers=[answer])
         mcp_bracket(r)
         sent = len(orders(r))

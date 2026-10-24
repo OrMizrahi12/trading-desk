@@ -23,6 +23,7 @@ A few words used below:
 | `Daily/` | One note per trading day, `YYYY-MM-DD`, from the [[Daily note]] template: plan, how the day went, counters. | Claude. |
 | `Weekly/` | One summary per week, `YYYY-Www` (e.g. `2026-W43`), written on Friday after the close: counters and a link to every trade note and daily note of the week. | The desk's note writer (see below). |
 | `Lessons/` | One short note per lesson, a single sentence of "do this differently" with links to the trades that taught it. Only `status: active` ones reach the trader (see the memory budget below); retired ones live in `Lessons/Archive/`. | The desk's reviewer proposes one after each closed trade (`status: proposed`); the person decides what becomes a rule. |
+| `Changelog/` | The [[Rules change log]]: every promotion, archiving and rollback of a lesson, with the numbers behind it. | The lesson tracker (`desk/lessons.py`), nobody by hand. |
 | `Templates/` | [[Trade note]] and [[Daily note]]. Copy them, never fill them in place. | The person. |
 
 ## How a day flows
@@ -72,7 +73,8 @@ A lesson's `status` decides where it lives. Only the person sets `active` (Claud
 | `status` | Meaning | Loads every bar? | Folder |
 |---|---|---|---|
 | `proposed` | Written by Claude, not yet approved. | No | `Lessons/` |
-| `active` | Approved. Needs `summary`, `seen` (times it was confirmed by a real trade) and `last_seen` (date). | **Yes** | `Lessons/` |
+| `active` | Approved. Needs `summary`, `seen` (times it was confirmed by a real trade), `last_seen` (date) and `activated` (the date the person approved it: the tracker counts trades from then on). | **Yes** | `Lessons/` |
+| `promoted` | Active, and proved itself: see "Lesson tracking" below. Listed in [[Promoted lessons]]. Needs `promoted:` (date). | **Yes**, like `active` | `Lessons/` |
 | `disputed` | Disagrees with another lesson and the tie is not resolved (see below). | No | `Lessons/` |
 | `superseded` | Replaced by a better lesson (`superseded_by: [[...]]`). | No | `Lessons/Archive/` |
 | `archived` | Retired to save room. | No | `Lessons/Archive/` |
@@ -111,6 +113,28 @@ A lesson's `status` decides where it lives. Only the person sets `active` (Claud
 ### Seeded notes
 A note with `seeded: true` is made-up test data for the budget script, never a real trade or lesson. Its name starts
 with `SEED`, it carries a warning banner, and it must be `archived` before a real run. The script warns if one is active.
+
+## Lesson tracking: which lessons actually pay
+The trader names the lessons it used in the `lessons` key of every answer (titles copied from the memory brief; `[]` when
+none). The journal's `trade_closed` record keeps every lesson named from the trade's buy to its end. `uv run -m desk.lessons`
+then compares, lesson by lesson, the trades that applied it with similar trades that did not (similar = made while the lesson
+was available, in a setup the applied trades also used): count, average R, standard deviation, and a 95% interval for the
+difference, found by bootstrapping (re-drawing the same trades 10,000 times). Plain report by default; `--apply` makes the
+changes, `--commit` also commits each (one commit per lesson, only its own files).
+
+| Verdict | When | What changes |
+|---|---|---|
+| **Promote** | `active`, at least 20 applied trades with a result, at least 10 similar ones, and the whole interval above 0 | `status: promoted`, entry in [[Promoted lessons]] |
+| **Archive** | `active`, at least 10 applied and 10 similar, and the whole interval below 0 | moved to `Lessons/Archive/`, `status: archived`, reason |
+| **Rollback** | `promoted`, the same test but only on trades after the promotion day (the earlier ones chose it, so they cannot confirm it) | removed from the playbook, archived |
+| **Keep** | anything else: not enough evidence yet | nothing |
+
+Every change is appended to [[Rules change log]] and committed. A lesson that looks good but has under 20 applications is
+kept, and the report says so. Limits to remember: a trade that names two lessons counts for both; lessons the trader
+claims without having used them spoil the comparison; with many lessons tested, some will pass by luck, so read the
+numbers in the log and not only the verdict. Nothing here loosens `CLAUDE.md` or the lab's limits.
+`uv run -m desk.lesson_demo` rebuilds a **seeded demo** (`experiments/lesson-demo-SEEDED/`, made-up trades) showing one
+promotion and one rollback; the tracker refuses to apply seeded trades to this vault.
 
 ## Conventions
 - Link with `[[Note name]]`. Every trade links its setup; every lesson links its trades; every daily note links its trades.

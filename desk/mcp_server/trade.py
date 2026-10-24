@@ -118,7 +118,7 @@ def place_bracket(ib, desk: Desk, *, size_r: float, stop: float, target: float |
     if target is None and not (no_target_reason or "").strip():
         raise Refused("a target is expected: give one, or explain in no_target_reason why there is none")
     try:
-        decision = parse({"action": "buy", "size_r": size_r, "stop": stop, "target": target, "reason": reason})
+        decision = parse({"action": "buy", "size_r": size_r, "stop": stop, "target": target, "reason": reason, "lessons": []})
     except InvalidDecision as exc:
         raise Refused(f"invalid order: {exc}") from exc
     own = desk.ownership(ib)
@@ -220,7 +220,7 @@ def cancel_order(ib, desk: Desk, *, order_id: int) -> dict:
 @journaled("close_position")
 def close_position(ib, desk: Desk, *, reason: str) -> dict:
     try:
-        decision = parse({"action": "close", "size_r": 0, "stop": None, "target": None, "reason": reason})
+        decision = parse({"action": "close", "size_r": 0, "stop": None, "target": None, "reason": reason, "lessons": []})
     except InvalidDecision as exc:
         raise Refused(f"invalid request: {exc}") from exc
     own = desk.ownership(ib)

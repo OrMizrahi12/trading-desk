@@ -24,7 +24,7 @@ Start with `vault/README.md`: it is the map.
 | `Market/` | Add notes. | `YYYY-MM-DD topic.md` |
 | `Trades/` | One note per ended trade, after the review. | `YYYY-MM-DD HHMM SPY.md` |
 | `Daily/` | One per trading day; update counters and "How the day went". | `YYYY-MM-DD.md` |
-| `Lessons/` | One sentence of "do this differently", linked to its trades. Say "seen once" until it repeats; never loosen a rule from one result. Write `status: proposed`; only the person sets `active`. Give it a one-sentence `summary:` (the trader sees only that). Retire to `Lessons/Archive/`, never delete. After any change run `uv run -m desk.memory` (limit 6,000 tokens). Rules for summarising, archiving and conflicting lessons: `vault/README.md`, section "Memory budget". | `Short imperative title.md` |
+| `Lessons/` | One sentence of "do this differently", linked to its trades. Say "seen once" until it repeats; never loosen a rule from one result. Write `status: proposed`; only the person sets `active`. Give it a one-sentence `summary:` (the trader sees only that). When you make a lesson `active`, add `activated: YYYY-MM-DD`. `promoted` and rollbacks are made only by `uv run -m desk.lessons` (see "Lesson tracking" in `vault/README.md`). Retire to `Lessons/Archive/`, never delete. After any change run `uv run -m desk.memory` (limit 6,000 tokens). Rules for summarising, archiving and conflicting lessons: `vault/README.md`, section "Memory budget". | `Short imperative title.md` |
 | `Templates/` | Nothing. Copy from it, never fill it in place. | |
 
 Steps for a new note:

@@ -65,18 +65,18 @@ class FakeModel:
         return a
 
 
-WAIT = {"action": "wait", "size_r": 0, "stop": None, "target": None, "reason": "nothing to do"}
+WAIT = {"action": "wait", "size_r": 0, "stop": None, "target": None, "reason": "nothing to do", "lessons": []}
 
 
 def buy(size_r=1.0, stop=597.0, target=606.0):
-    return {"action": "buy", "size_r": size_r, "stop": stop, "target": target, "reason": "test buy"}
+    return {"action": "buy", "size_r": size_r, "stop": stop, "target": target, "reason": "test buy", "lessons": []}
 
 
 def sell(size_r=0.3):
-    return {"action": "sell", "size_r": size_r, "stop": None, "target": None, "reason": "test sell"}
+    return {"action": "sell", "size_r": size_r, "stop": None, "target": None, "reason": "test sell", "lessons": []}
 
 
-CLOSE = {"action": "close", "size_r": 0, "stop": None, "target": None, "reason": "test close"}
+CLOSE = {"action": "close", "size_r": 0, "stop": None, "target": None, "reason": "test close", "lessons": []}
 
 
 class Rig:
