@@ -41,6 +41,11 @@ def patch_files(patch: Path) -> list[str]:
     return re.findall(r"^diff --git a/(\S+) b/", patch.read_text(), re.M)
 
 
+def title_of(note: Path, pid: str) -> str:
+    """The note's first heading without its leading `NNNN:` id, which the commit subject and ledger add themselves."""
+    return re.sub(rf"^{re.escape(pid)}:\s*", "", re.search(r"^# (.+)$", note.read_text(), re.M).group(1))
+
+
 def find(pid: str) -> Path:
     found = sorted(PROPOSALS.glob(f"{pid}-*.patch"))
     if not found:
@@ -88,7 +93,7 @@ def apply(pid: str, approved: bool, approval_mode: bool) -> int:
         print("working tree has uncommitted changes: commit or stash first")
         return 1
     run(["git", "apply", str(patch)])
-    title = re.search(r"^# (.+)$", patch.with_suffix(".md").read_text(), re.M).group(1)
+    title = title_of(patch.with_suffix(".md"), pid)
     rows = list(csv.DictReader(LEDGER.open()))
     last = rows[-1]
     n = len([r for r in rows if r["version"].startswith("Trader v2.")]) + 1
