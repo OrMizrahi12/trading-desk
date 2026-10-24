@@ -195,3 +195,14 @@ one rollback on **seeded, made-up** data in `experiments/lesson-demo-SEEDED/`. D
 Every 50 closed trades `vault/Reviews/Review after N trades.md` is written (by code, no model): results split by setup, time of
 day and market regime (15-minute trend at entry), each with its 95% interval, small groups marked "too few to say". Manually:
 `uv run -m desk.review [--write|--commit]`. The seeded demo contains one such review, labelled as made-up.
+
+## Regime gate (`--regime-gate`, off by default)
+
+A switch next to `--team`. A fixed rule labels each bar **trending** (the last close is more than 5 ATR from today's first
+open; ATR = average true range, the typical size of a 5-minute bar) or **ranging**, from closed bars only. With the switch
+on, Claude is asked only on trending bars and on every safety case: a held long, an open order, a fill since the last bar,
+the first bar after a start, and the last 30 minutes before the close. Once asked, Claude decides everything and all risk
+gates and seatbelts are unchanged. Skipped bars are journaled as a desk `wait` (`model_asked: false`, `regime_gate`), and the
+next call's delta carries every skipped bar. The 5 ATR threshold is the lab's pre-registered H1 number (see `desk/regime.py`
+for why it is not from module 7); it is not tuned. `uv run -m desk.regime_replay [--trace]` shows what the saved snapshots
+would have saved. Note: CLAUDE.md still says "never skips a bar"; it describes the default, and the switch changes that.

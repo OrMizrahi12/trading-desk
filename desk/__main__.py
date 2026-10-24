@@ -31,6 +31,9 @@ def main() -> None:
     parser.add_argument("--model", default=None, help="Claude model for claude -p (default: the CLI's default)")
     parser.add_argument("--team", action="store_true",
                         help="ask the analyst, risk manager and devil's advocate (.claude/agents) before the trader decides")
+    parser.add_argument("--regime-gate", action="store_true",
+                        help="wake the model only on trending bars (plus every safety case: a held long, open orders, a fill, "
+                             "the exit window); see desk/regime.py. Default: every bar reaches the model")
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
@@ -46,7 +49,7 @@ def main() -> None:
                   executor=Executor(ib, broker, contract), broker=broker, risk=risk, journal=Journal(),
                   state=State.load(), symbol=SYMBOL, fetch_daily=lambda: fetch_ib_daily(ib, contract),
                   lab_journal=LabJournal(JOURNAL_PATH), limits_check=limits_pin.verify,
-                  scribe=Scribe(Journal(), model=args.model)).run(once=args.once)
+                  scribe=Scribe(Journal(), model=args.model), regime_gate=args.regime_gate).run(once=args.once)
     finally:
         ib.disconnect()
 

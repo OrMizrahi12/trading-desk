@@ -1,7 +1,9 @@
 """The heartbeat: on every closed 5-minute bar of SPY, snapshot -> Claude -> validate -> gates -> paper orders -> journal.
 
-Python never filters or decides for the model: every closed bar is sent to it. Python only (a) refuses a decision
-that is invalid or unsafe and (b) fails safe to `wait` when the model gives no usable answer. Paper trading only.
+Python never decides for the model: every closed bar is sent to it, unless the optional regime gate (`regime_gate`,
+`--regime-gate`, see regime.py) is on, which only chooses whether to wake the model on a flat bar. Python otherwise (a)
+refuses a decision that is invalid or unsafe and (b) fails safe to `wait` when the model gives no usable answer. Paper
+trading only.
 """
 
 import dataclasses
@@ -19,7 +21,7 @@ from live.execution import DuplicateEntry, ExecutionHalt, OrderRejected
 from live.refs import owns
 from live.risk import RiskRefused, net_liquidation
 
-from . import execute, gates, memory, seatbelts, snapshot, trades
+from . import execute, gates, memory, regime, seatbelts, snapshot, trades
 from .limits_pin import LimitsTampered
 from .budget import Deadline
 from .decision import Decision, InvalidDecision, parse
@@ -48,7 +50,7 @@ class Heartbeat:
     def __init__(self, *, ib, contract, feed, model: Model, executor, broker, risk, journal: Journal, state: State,
                  symbol: str = "SPY", clock=utc_now, mono=time.monotonic, budget_s: float = BUDGET_S,
                  model_timeout_s: float = MODEL_TIMEOUT_S, min_exec_s: float = MIN_EXEC_S, fetch_daily=None,
-                 lab_journal=None, limits_check=None, scribe=None):
+                 lab_journal=None, limits_check=None, scribe=None, regime_gate: bool = False):
         self.ib, self.contract, self.feed, self.model = ib, contract, feed, model
         self.executor, self.broker, self.risk = executor, broker, risk
         self.journal, self.state, self.symbol, self.tag = journal, state, symbol, broker.tag
@@ -60,6 +62,8 @@ class Heartbeat:
         self._daily: tuple[str, pd.DataFrame | None] | None = None
         self._last_close: float | None = None  # newest known price, for the flatten seatbelt
         self._missed_day: str | None = None
+        self.regime_gate = regime_gate  # True = ask the model only on bars regime.decide() wakes it for
+        self._fills_seen: int | None = None  # fills today at the last handled bar (None = none yet: wake)
 
     # -- one poll ------------------------------------------------------------------------
 
@@ -123,6 +127,8 @@ class Heartbeat:
             text = json.dumps(snap, sort_keys=True, default=str)
             record["snapshot_sha1"] = hashlib.sha1(text.encode()).hexdigest()[:12]
             record["snapshot_file"] = str(self.journal.write_snapshot(bar_start.strftime("%Y%m%dT%H%MZ"), snap))
+            if self.regime_gate and not self._wake(snap, record):
+                return self._finish_asleep(record, now)
             session = self._open_session(bar_start)
             session.full = snap
             sent = snapshot.delta(snap, self.state.session_last_bar) if session.resume and self.state.session_last_bar else None
@@ -172,6 +178,28 @@ class Heartbeat:
         self._sync_lab_journal()
         if self.state.halted:
             raise Halted(self.state.halted)
+        return record
+
+    def _wake(self, snap: dict, record: dict) -> bool:
+        """Regime gate: should the model be asked about this bar? The answer and its reason are journaled either way."""
+        v = regime.decide(snap, fills_seen=self._fills_seen, holding=bool(self.state.open_trade))
+        self._fills_seen = len(snap.get("todays_fills") or [])
+        record["regime_gate"] = {"wake": v.wake, "why": v.why, "regime": v.regime, "distance_atr": v.distance_atr}
+        return v.wake
+
+    def _finish_asleep(self, record: dict, now: pd.Timestamp) -> dict:
+        """The bar the gate did not wake the model for: journaled as a `wait` made by the desk, nothing sent anywhere."""
+        record["decision"] = {"action": "wait", "size_r": 0.0, "stop": None, "target": None,
+                              "reason": "regime gate: model not asked on this bar (" + record["regime_gate"]["why"] + ")"}
+        record["verdict"] = {"allowed": True, "note": "", "reason": "wait", "seatbelt": None, "shares": 0}
+        record["model_asked"] = False
+        record["elapsed_s"] = 0.0
+        record["over_budget"] = False
+        self.journal.append(record)
+        self._close_out(now)
+        self.state.last_bar_ts = record["bar"]
+        self.state.save()
+        self._sync_lab_journal()
         return record
 
     def _open_session(self, bar_start: pd.Timestamp) -> Session:
