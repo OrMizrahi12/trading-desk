@@ -229,3 +229,10 @@ second newest in none, and a bar seen 12 minutes after its close held a median 2
 heartbeat (and the MCP trade path) look at it, so a bar is decided on about 16-21 minutes after its close, still inside the
 30-minute stale limit. The flatten seatbelt keeps the newest known price. Tests: `tests/test_settled.py`. The lab's own live
 engine (`live/runner`) uses the same feed and is not changed here.
+
+## Forward test
+
+`experiments/PROTOCOL.md` fixes, before any result exists, how the current trader version is judged: version and hash from the
+ledger, period, symbol, metrics, the three baselines (random entries matched on frequency and risk, buy-and-hold, the ORB strategy
+on the same days), the minimum number of trades, the stop rule, and a table of how many trades a given Sharpe ratio needs before
+it can be told from luck. `uv run -m desk.forward_report` is the report; it stays sealed (data quality only) until the stop rule is reached.
